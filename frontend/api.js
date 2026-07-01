@@ -1,0 +1,126 @@
+/* ============================================================================
+   Convexity — data layer.
+   Talks to the FastAPI backend when the dashboard is served by it, and falls
+   back to a bundled sample scan when opened without a backend (demo mode).
+
+   Backend contract (see convexity/api/routes):
+     GET  /health                         -> {status:"ok", ...}
+     POST /api/scans                      -> 202 {id, status, progress}
+     GET  /api/scans/latest               -> {job_id, result} | 404
+     GET  /api/scans/{id}                 -> {id, status, progress, has_result}
+     GET  /api/scans/{id}/result          -> {job_id, result}
+     GET  /api/scans/{id}/events          -> SSE: event: progress|done|error
+     GET  /api/companies/{ticker}         -> {ticker, analysis} | analysis
+   ========================================================================== */
+
+const API_BASE = "/api";
+
+async function ping() {
+  try { const r = await fetch("/health"); return r.ok; } catch (_e) { return false; }
+}
+
+let _liveCache = null;
+export async function isLive() {
+  if (_liveCache === null) _liveCache = await ping();
+  return _liveCache;
+}
+
+/* Bundled sample scan — works from disk and when served. Returns a ScanResult. */
+export async function loadSample() {
+  for (const url of ["sample_scan.json", "./sample_scan.json", "examples/sample_scan.json"]) {
+    try { const r = await fetch(url); if (r.ok) return await r.json(); } catch (_e) { /* next */ }
+  }
+  throw new Error("sample scan not found");
+}
+
+/* Most recent completed scan (ScanResult), or null. */
+export async function loadLatest() {
+  try {
+    const r = await fetch(`${API_BASE}/scans/latest`);
+    if (!r.ok) return null;
+    const data = await r.json();
+    return data.result || null;
+  } catch (_e) { return null; }
+}
+
+/* Start a live scan; stream progress via SSE; resolve with the ScanResult.
+   onProgress({stage, done, total, message, pct}). */
+export async function runScan(params, onProgress) {
+  const r = await fetch(`${API_BASE}/scans`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(params),
+  });
+  if (!r.ok) throw new Error(`scan start failed (${r.status})`);
+  const job = await r.json();
+  const id = job.id;
+  if (!id) throw new Error("no scan id returned");
+  return await followJob(id, onProgress);
+}
+
+async function fetchResult(id) {
+  const r = await fetch(`${API_BASE}/scans/${id}/result`);
+  if (!r.ok) throw new Error(`result unavailable (${r.status})`);
+  const data = await r.json();
+  return data.result || data;
+}
+
+function pct(p) { return p && p.total ? Math.round((p.done / p.total) * 100) : (p && p.pct) || 0; }
+
+function followJob(id, onProgress) {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    const finish = async () => {
+      if (done) return; done = true;
+      try { resolve(await fetchResult(id)); } catch (e) { reject(e); }
+    };
+    const fail = (msg) => { if (done) return; done = true; reject(new Error(msg || "scan failed")); };
+
+    let es;
+    try { es = new EventSource(`${API_BASE}/scans/${id}/events`); }
+    catch (_e) { return poll(id, onProgress, resolve, reject, () => done, (v) => (done = v)); }
+
+    es.addEventListener("progress", (ev) => {
+      try { const p = JSON.parse(ev.data); onProgress && onProgress({ ...p, pct: pct(p) }); } catch (_e) {}
+    });
+    es.addEventListener("done", () => { es.close(); finish(); });
+    es.addEventListener("error", (ev) => {
+      // Named "error" frame from the server carries data; a bare connection
+      // drop does not. On a connection drop, fall back to polling.
+      if (ev && ev.data) {
+        try { const p = JSON.parse(ev.data); es.close(); return fail(p.error); } catch (_e) {}
+      }
+      es.close();
+      if (!done) poll(id, onProgress, resolve, reject, () => done, (v) => (done = v));
+    });
+  });
+}
+
+async function poll(id, onProgress, resolve, reject, isDone, setDone) {
+  const started = performance.now();
+  const tick = async () => {
+    if (isDone()) return;
+    try {
+      const r = await fetch(`${API_BASE}/scans/${id}`);
+      const data = await r.json();
+      if (data.progress) onProgress && onProgress({ ...data.progress, pct: pct(data.progress) });
+      if (data.status === "completed") {
+        setDone(true);
+        try { resolve(await fetchResult(id)); } catch (e) { reject(e); }
+        return;
+      }
+      if (data.status === "failed") { setDone(true); reject(new Error(data.error || "scan failed")); return; }
+    } catch (_e) { /* keep polling */ }
+    if (performance.now() - started > 15 * 60 * 1000) { setDone(true); reject(new Error("scan timed out")); return; }
+    setTimeout(tick, 1200);
+  };
+  tick();
+}
+
+/* Single-company analysis (live only). */
+export async function fetchCompany(ticker) {
+  const r = await fetch(`${API_BASE}/companies/${encodeURIComponent(ticker)}`);
+  if (!r.ok) throw new Error(`company ${ticker} not found`);
+  const data = await r.json();
+  return data.analysis || data;
+}

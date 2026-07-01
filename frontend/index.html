@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Convexity — Small-Cap Opportunity Discovery</title>
+  <meta name="description" content="Convexity — an evidence-driven research and screening platform for U.S. small- and micro-cap equities. A transparent research tool, not investment advice." />
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M3 25 C10 25 14 7 29 7' stroke='%236e9bff' stroke-width='3' fill='none' stroke-linecap='round'/%3E%3C/svg%3E" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="wrap">
+      <div class="brand">
+        <svg class="mark" viewBox="0 0 32 32" fill="none" aria-hidden="true">
+          <defs><linearGradient id="mg" x1="0" y1="1" x2="1" y2="0">
+            <stop offset="0" stop-color="#46e0c0"/><stop offset="1" stop-color="#6e9bff"/></linearGradient></defs>
+          <path d="M3 26 C11 26 15 6 29 6" stroke="url(#mg)" stroke-width="3" stroke-linecap="round"/>
+          <circle cx="29" cy="6" r="2.6" fill="#46e0c0"/>
+          <path d="M3 26 L29 26" stroke="rgba(255,255,255,0.12)" stroke-width="1.4" stroke-linecap="round"/>
+        </svg>
+        <div>
+          <div class="name"><b>CONVEXITY</b></div>
+          <div class="tag">Small-Cap Opportunity Discovery</div>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <div class="mode-pill demo" id="modePill"><span class="dot"></span> Demo · sample data</div>
+    </div>
+  </header>
+
+  <main class="wrap">
+    <section class="hero">
+      <h1><span class="grad">Rare, asymmetric small-cap ideas —</span><br/>surfaced only when many independent signals agree.</h1>
+      <p>Convexity searches the eligible universe of U.S. small- and micro-cap companies and ranks the highest-conviction opportunities using twelve independent, transparent lines of evidence — value, growth, quality, financial health, technical structure, momentum, catalysts, risk, management, competitive position, ownership, and historical analogs. Every score traces back to the data that produced it.</p>
+
+      <div class="disclaimer">
+        <svg class="ico" width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.3"/><path d="M8 4.6v4.2M8 11.2h.01" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+        <div><b>Research tool — not investment advice, and not a predictor.</b> No system can reliably forecast stock prices. Convexity aggregates public evidence into transparent, auditable scores to support your own research. High conviction here means many <em>independent</em> signals agree — never a guarantee. Do your own due diligence.</div>
+      </div>
+    </section>
+
+    <section class="controls">
+      <div class="row">
+        <div class="field">
+          <label>Min market cap <span class="val" id="minCapVal"></span></label>
+          <input type="range" id="minCap" min="10000000" max="1000000000" step="10000000" value="50000000" data-out="minCapVal" data-fmt="cap" />
+        </div>
+        <div class="field">
+          <label>Max market cap <span class="val" id="maxCapVal"></span></label>
+          <input type="range" id="maxCap" min="300000000" max="5000000000" step="50000000" value="2000000000" data-out="maxCapVal" data-fmt="cap" />
+        </div>
+        <div class="field">
+          <label>Top N</label>
+          <input type="number" id="topN" min="3" max="25" value="5" />
+        </div>
+        <div class="field">
+          <label>Universe limit <span class="val">(scan speed)</span></label>
+          <input type="number" id="uniLimit" min="10" max="2000" value="60" />
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="loadSampleBtn">Load sample</button>
+          <button class="btn primary" id="runBtn">
+            <svg class="ico" viewBox="0 0 16 16" fill="none"><path d="M4 3l9 5-9 5V3z" fill="currentColor"/></svg>
+            Run scan
+          </button>
+        </div>
+      </div>
+      <div class="progress-wrap" id="progressWrap">
+        <div class="progress-head"><span class="stage" id="progressStage">preparing…</span><span id="progressPct">0%</span></div>
+        <div class="progress-track"><div class="progress-bar" id="progressBar"></div></div>
+      </div>
+    </section>
+
+    <section class="kpis" id="kpis"></section>
+
+    <section class="section">
+      <div class="section-head"><h2>Evidence overview</h2><span class="sub">composite scores and the prized high-score / high-conviction quadrant</span></div>
+      <div class="chart-grid">
+        <div class="chart-card">
+          <h3>Composite conviction score</h3>
+          <div class="csub">Weighted blend of 12 independent categories, dampened by risk &amp; data coverage</div>
+          <div id="barChart"></div>
+        </div>
+        <div class="chart-card">
+          <h3>Conviction vs. composite</h3>
+          <div class="csub">Top-right = strong score backed by many agreeing independent signals</div>
+          <div id="scatterChart"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="section-head">
+        <h2>Ranked opportunities</h2><span class="sub">click any row for the full evidence drill-down</span>
+        <div class="tools">
+          <input class="filter-input" id="filterInput" placeholder="Filter ticker, name, sector…" />
+          <button class="btn ghost" id="exportCsv">Export CSV</button>
+          <button class="btn ghost" id="exportJson">Export JSON</button>
+        </div>
+      </div>
+      <div class="table-card" id="tableCard">
+        <div class="empty"><div class="spinner"></div><div class="big">Loading scan…</div></div>
+      </div>
+    </section>
+  </main>
+
+  <div class="overlay" id="overlay"></div>
+  <aside class="drawer" id="drawer" aria-label="Company detail"></aside>
+
+  <footer class="site">
+    <div class="wrap">
+      <div class="fnote">
+        <span class="fbrand">Convexity</span> — an open, evidence-driven equity research and screening platform.
+        It surfaces ideas for <b>further human research</b>; it does not provide investment advice, recommendations, or price predictions.
+        Data is sourced from public providers and may be delayed, incomplete, or inaccurate. Nothing here is a solicitation to buy or sell any security.
+        Sample data shown in demo mode is clearly labeled and entirely illustrative.
+      </div>
+    </div>
+  </footer>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>

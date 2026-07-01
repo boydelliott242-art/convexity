@@ -1,0 +1,2837 @@
+{
+  "generated_at": "2026-06-30T18:46:13.633548+00:00",
+  "params": {
+    "min_market_cap": 50000000.0,
+    "max_market_cap": 2000000000.0,
+    "min_avg_dollar_volume": 200000.0,
+    "exclude_sectors": [],
+    "top_n": 5,
+    "universe_limit": 25
+  },
+  "universe_size": 25,
+  "screened_count": 5,
+  "analyzed_count": 5,
+  "error_count": 0,
+  "top": [
+    {
+      "ticker": "NVLX",
+      "name": "Novalux Instruments Inc. (SAMPLE)",
+      "industry": "Scientific & Technical Instruments",
+      "sector": "Technology",
+      "market_cap": 410000000,
+      "cap_tier": "small",
+      "composite_score": 72.0,
+      "conviction_confidence": 0.74,
+      "rank": 1,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 78.0,
+          "confidence": 0.762,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.76
+        },
+        {
+          "category": "growth",
+          "score": 74.0,
+          "confidence": 0.746,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.747
+        },
+        {
+          "category": "quality",
+          "score": 71.0,
+          "confidence": 0.734,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.737
+        },
+        {
+          "category": "financial_health",
+          "score": 80.0,
+          "confidence": 0.77,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.767
+        },
+        {
+          "category": "catalyst",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "competitive",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "management",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "ownership",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "momentum",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "technical",
+          "score": 67.0,
+          "confidence": 0.718,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.723
+        },
+        {
+          "category": "historical_analog",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "risk",
+          "score": 74.0,
+          "confidence": 0.746,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.747
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A profitable niche instruments maker screening cheap on several independent measures at once — value, growth and balance-sheet strength all point the same way in this illustrative case.",
+      "bull_case": [
+        "[SAMPLE] Cheap on EV/EBITDA and P/FCF versus invented peers.",
+        "[SAMPLE] Double-digit revenue growth with expanding margins.",
+        "[SAMPLE] Net cash balance sheet funds growth without dilution."
+      ],
+      "bear_case": [
+        "[SAMPLE] Customer concentration in a few large research labs.",
+        "[SAMPLE] Small float can amplify price swings."
+      ],
+      "catalysts": [
+        "[SAMPLE] New product line shipping next quarter.",
+        "[SAMPLE] Potential index inclusion on continued growth."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Demand tied to research-funding cycles.",
+        "[SAMPLE] Thin liquidity relative to larger peers."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track gross margin trend over the next two prints.",
+        "[SAMPLE] Watch order backlog and customer concentration.",
+        "[SAMPLE] Confirm free cash flow stays positive."
+      ],
+      "signal_agreement": 0.81
+    },
+    {
+      "ticker": "HRVS",
+      "name": "Harvest Ridge Agritech Corp. (SAMPLE)",
+      "industry": "Farm & Heavy Construction Machinery",
+      "sector": "Industrials",
+      "market_cap": 265000000,
+      "cap_tier": "micro",
+      "composite_score": 67.06,
+      "conviction_confidence": 0.66,
+      "rank": 2,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "growth",
+          "score": 69.0,
+          "confidence": 0.726,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.73
+        },
+        {
+          "category": "quality",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "financial_health",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "catalyst",
+          "score": 71.0,
+          "confidence": 0.734,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.737
+        },
+        {
+          "category": "competitive",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "management",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "ownership",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "momentum",
+          "score": 63.0,
+          "confidence": 0.702,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.71
+        },
+        {
+          "category": "technical",
+          "score": 61.0,
+          "confidence": 0.694,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.703
+        },
+        {
+          "category": "historical_analog",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "risk",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] An illustrative micro-cap equipment maker with a credible order pipeline and insider buying, screening reasonably across the fundamental categories.",
+      "bull_case": [
+        "[SAMPLE] Backlog up sharply on new dealer agreements.",
+        "[SAMPLE] Insiders have been net buyers over the past year."
+      ],
+      "bear_case": [
+        "[SAMPLE] Cyclical end-markets sensitive to commodity prices.",
+        "[SAMPLE] Moderate leverage limits downside cushion."
+      ],
+      "catalysts": [
+        "[SAMPLE] Large fleet order expected to close this half.",
+        "[SAMPLE] Margin step-up from a new factory line."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Input-cost inflation could compress margins.",
+        "[SAMPLE] Weather/season swings affect quarterly demand."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Watch backlog conversion to revenue.",
+        "[SAMPLE] Monitor net debt / EBITDA each quarter."
+      ],
+      "signal_agreement": 0.7
+    },
+    {
+      "ticker": "MDBR",
+      "name": "Meridian Biopharma Ltd. (SAMPLE)",
+      "industry": "Biotechnology",
+      "sector": "Healthcare",
+      "market_cap": 180000000,
+      "cap_tier": "micro",
+      "composite_score": 61.04,
+      "conviction_confidence": 0.52,
+      "rank": 3,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "growth",
+          "score": 80.0,
+          "confidence": 0.77,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.767
+        },
+        {
+          "category": "quality",
+          "score": 50.0,
+          "confidence": 0.65,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.667
+        },
+        {
+          "category": "financial_health",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "catalyst",
+          "score": 84.0,
+          "confidence": 0.786,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.78
+        },
+        {
+          "category": "competitive",
+          "score": 62.0,
+          "confidence": 0.698,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.707
+        },
+        {
+          "category": "management",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "ownership",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "momentum",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "technical",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "historical_analog",
+          "score": 52.0,
+          "confidence": 0.658,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.673
+        },
+        {
+          "category": "risk",
+          "score": 44.0,
+          "confidence": 0.626,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.647
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A higher-variance illustrative biotech: strong catalyst and growth reads offset by a weaker risk score, so conviction stays modest despite some bullish categories.",
+      "bull_case": [
+        "[SAMPLE] Phase-2 readout due within months.",
+        "[SAMPLE] Cash runway covers the next two catalysts."
+      ],
+      "bear_case": [
+        "[SAMPLE] Binary clinical outcome dominates the thesis.",
+        "[SAMPLE] No product revenue yet; pre-commercial."
+      ],
+      "catalysts": [
+        "[SAMPLE] Top-line Phase-2 data expected next quarter.",
+        "[SAMPLE] Potential partnership announcement."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Trial failure would impair value materially.",
+        "[SAMPLE] Future financing could dilute holders."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track cash runway against catalyst timing.",
+        "[SAMPLE] Watch for trial-enrollment updates.",
+        "[SAMPLE] Note any going-concern language in filings."
+      ],
+      "signal_agreement": 0.55
+    },
+    {
+      "ticker": "CSTL",
+      "name": "Coastal Logistics Group (SAMPLE)",
+      "industry": "Integrated Freight & Logistics",
+      "sector": "Industrials",
+      "market_cap": 520000000,
+      "cap_tier": "small",
+      "composite_score": 63.26,
+      "conviction_confidence": 0.6,
+      "rank": 4,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "growth",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "quality",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "financial_health",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "catalyst",
+          "score": 54.0,
+          "confidence": 0.666,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.68
+        },
+        {
+          "category": "competitive",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "management",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "ownership",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "momentum",
+          "score": 56.0,
+          "confidence": 0.674,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.687
+        },
+        {
+          "category": "technical",
+          "score": 59.0,
+          "confidence": 0.686,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.697
+        },
+        {
+          "category": "historical_analog",
+          "score": 57.0,
+          "confidence": 0.678,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.69
+        },
+        {
+          "category": "risk",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A steadier illustrative logistics operator: solid quality and financial-health reads, fewer near-term catalysts, lower variance.",
+      "bull_case": [
+        "[SAMPLE] Consistent free cash flow and disciplined capital returns.",
+        "[SAMPLE] Regional density gives a modest cost edge."
+      ],
+      "bear_case": [
+        "[SAMPLE] Freight rates are cyclical and can soften quickly.",
+        "[SAMPLE] Limited growth catalysts in the near term."
+      ],
+      "catalysts": [
+        "[SAMPLE] Potential tuck-in acquisition of a regional carrier.",
+        "[SAMPLE] Buyback program could resume."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Fuel-cost swings affect margins.",
+        "[SAMPLE] Exposure to a single large shipper."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Watch operating ratio quarter over quarter.",
+        "[SAMPLE] Track free cash flow conversion."
+      ],
+      "signal_agreement": 0.62
+    },
+    {
+      "ticker": "TERN",
+      "name": "Tern Specialty Materials (SAMPLE)",
+      "industry": "Specialty Chemicals",
+      "sector": "Materials",
+      "market_cap": 340000000,
+      "cap_tier": "small",
+      "composite_score": 62.4,
+      "conviction_confidence": 0.57,
+      "rank": 5,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "growth",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "quality",
+          "score": 62.0,
+          "confidence": 0.698,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.707
+        },
+        {
+          "category": "financial_health",
+          "score": 65.0,
+          "confidence": 0.71,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.717
+        },
+        {
+          "category": "catalyst",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "competitive",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "management",
+          "score": 63.0,
+          "confidence": 0.702,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.71
+        },
+        {
+          "category": "ownership",
+          "score": 59.0,
+          "confidence": 0.686,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.697
+        },
+        {
+          "category": "momentum",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "technical",
+          "score": 57.0,
+          "confidence": 0.678,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.69
+        },
+        {
+          "category": "historical_analog",
+          "score": 54.0,
+          "confidence": 0.666,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.68
+        },
+        {
+          "category": "risk",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] An illustrative specialty-materials maker screening cheap with a defensible niche; signals are constructive but not unanimous.",
+      "bull_case": [
+        "[SAMPLE] Proprietary formulations support pricing power.",
+        "[SAMPLE] Valuation discount to invented specialty-chem peers."
+      ],
+      "bear_case": [
+        "[SAMPLE] Raw-material cost pass-through can lag.",
+        "[SAMPLE] Moderate customer concentration."
+      ],
+      "catalysts": [
+        "[SAMPLE] New high-margin product qualification underway.",
+        "[SAMPLE] Capacity expansion completing this year."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Input-cost volatility.",
+        "[SAMPLE] Regulatory changes affecting chemical handling."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track gross margin versus input costs.",
+        "[SAMPLE] Watch new-product qualification milestones."
+      ],
+      "signal_agreement": 0.6
+    }
+  ],
+  "all_ranked": [
+    {
+      "ticker": "NVLX",
+      "name": "Novalux Instruments Inc. (SAMPLE)",
+      "industry": "Scientific & Technical Instruments",
+      "sector": "Technology",
+      "market_cap": 410000000,
+      "cap_tier": "small",
+      "composite_score": 72.0,
+      "conviction_confidence": 0.74,
+      "rank": 1,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 78.0,
+          "confidence": 0.762,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.76
+        },
+        {
+          "category": "growth",
+          "score": 74.0,
+          "confidence": 0.746,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.747
+        },
+        {
+          "category": "quality",
+          "score": 71.0,
+          "confidence": 0.734,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.737
+        },
+        {
+          "category": "financial_health",
+          "score": 80.0,
+          "confidence": 0.77,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.767
+        },
+        {
+          "category": "catalyst",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "competitive",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "management",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "ownership",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "momentum",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "technical",
+          "score": 67.0,
+          "confidence": 0.718,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.723
+        },
+        {
+          "category": "historical_analog",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "risk",
+          "score": 74.0,
+          "confidence": 0.746,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:NVLX",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.747
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A profitable niche instruments maker screening cheap on several independent measures at once — value, growth and balance-sheet strength all point the same way in this illustrative case.",
+      "bull_case": [
+        "[SAMPLE] Cheap on EV/EBITDA and P/FCF versus invented peers.",
+        "[SAMPLE] Double-digit revenue growth with expanding margins.",
+        "[SAMPLE] Net cash balance sheet funds growth without dilution."
+      ],
+      "bear_case": [
+        "[SAMPLE] Customer concentration in a few large research labs.",
+        "[SAMPLE] Small float can amplify price swings."
+      ],
+      "catalysts": [
+        "[SAMPLE] New product line shipping next quarter.",
+        "[SAMPLE] Potential index inclusion on continued growth."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Demand tied to research-funding cycles.",
+        "[SAMPLE] Thin liquidity relative to larger peers."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track gross margin trend over the next two prints.",
+        "[SAMPLE] Watch order backlog and customer concentration.",
+        "[SAMPLE] Confirm free cash flow stays positive."
+      ],
+      "signal_agreement": 0.81
+    },
+    {
+      "ticker": "HRVS",
+      "name": "Harvest Ridge Agritech Corp. (SAMPLE)",
+      "industry": "Farm & Heavy Construction Machinery",
+      "sector": "Industrials",
+      "market_cap": 265000000,
+      "cap_tier": "micro",
+      "composite_score": 67.06,
+      "conviction_confidence": 0.66,
+      "rank": 2,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "growth",
+          "score": 69.0,
+          "confidence": 0.726,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.73
+        },
+        {
+          "category": "quality",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "financial_health",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "catalyst",
+          "score": 71.0,
+          "confidence": 0.734,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.737
+        },
+        {
+          "category": "competitive",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "management",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "ownership",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "momentum",
+          "score": 63.0,
+          "confidence": 0.702,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.71
+        },
+        {
+          "category": "technical",
+          "score": 61.0,
+          "confidence": 0.694,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.703
+        },
+        {
+          "category": "historical_analog",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "risk",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:HRVS",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] An illustrative micro-cap equipment maker with a credible order pipeline and insider buying, screening reasonably across the fundamental categories.",
+      "bull_case": [
+        "[SAMPLE] Backlog up sharply on new dealer agreements.",
+        "[SAMPLE] Insiders have been net buyers over the past year."
+      ],
+      "bear_case": [
+        "[SAMPLE] Cyclical end-markets sensitive to commodity prices.",
+        "[SAMPLE] Moderate leverage limits downside cushion."
+      ],
+      "catalysts": [
+        "[SAMPLE] Large fleet order expected to close this half.",
+        "[SAMPLE] Margin step-up from a new factory line."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Input-cost inflation could compress margins.",
+        "[SAMPLE] Weather/season swings affect quarterly demand."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Watch backlog conversion to revenue.",
+        "[SAMPLE] Monitor net debt / EBITDA each quarter."
+      ],
+      "signal_agreement": 0.7
+    },
+    {
+      "ticker": "MDBR",
+      "name": "Meridian Biopharma Ltd. (SAMPLE)",
+      "industry": "Biotechnology",
+      "sector": "Healthcare",
+      "market_cap": 180000000,
+      "cap_tier": "micro",
+      "composite_score": 61.04,
+      "conviction_confidence": 0.52,
+      "rank": 3,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "growth",
+          "score": 80.0,
+          "confidence": 0.77,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.767
+        },
+        {
+          "category": "quality",
+          "score": 50.0,
+          "confidence": 0.65,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.667
+        },
+        {
+          "category": "financial_health",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "catalyst",
+          "score": 84.0,
+          "confidence": 0.786,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.78
+        },
+        {
+          "category": "competitive",
+          "score": 62.0,
+          "confidence": 0.698,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.707
+        },
+        {
+          "category": "management",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "ownership",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "momentum",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "technical",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "historical_analog",
+          "score": 52.0,
+          "confidence": 0.658,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.673
+        },
+        {
+          "category": "risk",
+          "score": 44.0,
+          "confidence": 0.626,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:MDBR",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.647
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A higher-variance illustrative biotech: strong catalyst and growth reads offset by a weaker risk score, so conviction stays modest despite some bullish categories.",
+      "bull_case": [
+        "[SAMPLE] Phase-2 readout due within months.",
+        "[SAMPLE] Cash runway covers the next two catalysts."
+      ],
+      "bear_case": [
+        "[SAMPLE] Binary clinical outcome dominates the thesis.",
+        "[SAMPLE] No product revenue yet; pre-commercial."
+      ],
+      "catalysts": [
+        "[SAMPLE] Top-line Phase-2 data expected next quarter.",
+        "[SAMPLE] Potential partnership announcement."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Trial failure would impair value materially.",
+        "[SAMPLE] Future financing could dilute holders."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track cash runway against catalyst timing.",
+        "[SAMPLE] Watch for trial-enrollment updates.",
+        "[SAMPLE] Note any going-concern language in filings."
+      ],
+      "signal_agreement": 0.55
+    },
+    {
+      "ticker": "CSTL",
+      "name": "Coastal Logistics Group (SAMPLE)",
+      "industry": "Integrated Freight & Logistics",
+      "sector": "Industrials",
+      "market_cap": 520000000,
+      "cap_tier": "small",
+      "composite_score": 63.26,
+      "conviction_confidence": 0.6,
+      "rank": 4,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 66.0,
+          "confidence": 0.714,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.72
+        },
+        {
+          "category": "growth",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "quality",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "financial_health",
+          "score": 72.0,
+          "confidence": 0.738,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.74
+        },
+        {
+          "category": "catalyst",
+          "score": 54.0,
+          "confidence": 0.666,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.68
+        },
+        {
+          "category": "competitive",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        },
+        {
+          "category": "management",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "ownership",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "momentum",
+          "score": 56.0,
+          "confidence": 0.674,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.687
+        },
+        {
+          "category": "technical",
+          "score": 59.0,
+          "confidence": 0.686,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.697
+        },
+        {
+          "category": "historical_analog",
+          "score": 57.0,
+          "confidence": 0.678,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.69
+        },
+        {
+          "category": "risk",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:CSTL",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] A steadier illustrative logistics operator: solid quality and financial-health reads, fewer near-term catalysts, lower variance.",
+      "bull_case": [
+        "[SAMPLE] Consistent free cash flow and disciplined capital returns.",
+        "[SAMPLE] Regional density gives a modest cost edge."
+      ],
+      "bear_case": [
+        "[SAMPLE] Freight rates are cyclical and can soften quickly.",
+        "[SAMPLE] Limited growth catalysts in the near term."
+      ],
+      "catalysts": [
+        "[SAMPLE] Potential tuck-in acquisition of a regional carrier.",
+        "[SAMPLE] Buyback program could resume."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Fuel-cost swings affect margins.",
+        "[SAMPLE] Exposure to a single large shipper."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Watch operating ratio quarter over quarter.",
+        "[SAMPLE] Track free cash flow conversion."
+      ],
+      "signal_agreement": 0.62
+    },
+    {
+      "ticker": "TERN",
+      "name": "Tern Specialty Materials (SAMPLE)",
+      "industry": "Specialty Chemicals",
+      "sector": "Materials",
+      "market_cap": 340000000,
+      "cap_tier": "small",
+      "composite_score": 62.4,
+      "conviction_confidence": 0.57,
+      "rank": 5,
+      "subscores": [
+        {
+          "category": "value",
+          "score": 70.0,
+          "confidence": 0.73,
+          "weight": 0.16,
+          "rationale": "[SAMPLE] Valuation multiples vs. invented sector peers in this sample.",
+          "evidence": [
+            {
+              "label": "EV/EBITDA",
+              "value": "7.8x",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.733
+        },
+        {
+          "category": "growth",
+          "score": 60.0,
+          "confidence": 0.69,
+          "weight": 0.15,
+          "rationale": "[SAMPLE] Illustrative multi-year revenue and earnings growth trend.",
+          "evidence": [
+            {
+              "label": "3-yr revenue CAGR",
+              "value": "21%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.7
+        },
+        {
+          "category": "quality",
+          "score": 62.0,
+          "confidence": 0.698,
+          "weight": 0.14,
+          "rationale": "[SAMPLE] Sample margins, returns on capital and earnings consistency.",
+          "evidence": [
+            {
+              "label": "Operating margin",
+              "value": "18%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.707
+        },
+        {
+          "category": "financial_health",
+          "score": 65.0,
+          "confidence": 0.71,
+          "weight": 0.13,
+          "rationale": "[SAMPLE] Sample balance-sheet strength, leverage and coverage.",
+          "evidence": [
+            {
+              "label": "Net debt / EBITDA",
+              "value": "0.6x",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.717
+        },
+        {
+          "category": "catalyst",
+          "score": 58.0,
+          "confidence": 0.682,
+          "weight": 0.1,
+          "rationale": "[SAMPLE] Invented near-term catalysts (product, contract, filing).",
+          "evidence": [
+            {
+              "label": "Next catalyst",
+              "value": "Q3 product launch",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.693
+        },
+        {
+          "category": "competitive",
+          "score": 68.0,
+          "confidence": 0.722,
+          "weight": 0.07,
+          "rationale": "[SAMPLE] Sample moat and competitive-position read.",
+          "evidence": [
+            {
+              "label": "Gross-margin stability",
+              "value": "stable",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.727
+        },
+        {
+          "category": "management",
+          "score": 63.0,
+          "confidence": 0.702,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Illustrative capital allocation and insider alignment.",
+          "evidence": [
+            {
+              "label": "Insider net buying (12m)",
+              "value": "+$2.1M",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.71
+        },
+        {
+          "category": "ownership",
+          "score": 59.0,
+          "confidence": 0.686,
+          "weight": 0.06,
+          "rationale": "[SAMPLE] Invented institutional and insider ownership signals.",
+          "evidence": [
+            {
+              "label": "Institutional ownership",
+              "value": "42%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.697
+        },
+        {
+          "category": "momentum",
+          "score": 55.0,
+          "confidence": 0.67,
+          "weight": 0.05,
+          "rationale": "[SAMPLE] Sample relative price and earnings-revision momentum.",
+          "evidence": [
+            {
+              "label": "6-month relative return",
+              "value": "+14%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.683
+        },
+        {
+          "category": "technical",
+          "score": 57.0,
+          "confidence": 0.678,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Illustrative trend and moving-average posture.",
+          "evidence": [
+            {
+              "label": "Price vs. 200-day MA",
+              "value": "+9%",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.69
+        },
+        {
+          "category": "historical_analog",
+          "score": 54.0,
+          "confidence": 0.666,
+          "weight": 0.04,
+          "rationale": "[SAMPLE] Sample similarity to past set-ups (illustrative only).",
+          "evidence": [
+            {
+              "label": "Analog cohort hit-rate",
+              "value": "illustrative",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "neutral"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.68
+        },
+        {
+          "category": "risk",
+          "score": 64.0,
+          "confidence": 0.706,
+          "weight": 0.0,
+          "rationale": "[SAMPLE] Sample risk profile (higher score == safer); a dampener, not additive.",
+          "evidence": [
+            {
+              "label": "Liquidity buffer",
+              "value": "11 months cash",
+              "detail": null,
+              "source": "SAMPLE:TERN",
+              "as_of": null,
+              "url": null,
+              "direction": "bullish"
+            }
+          ],
+          "flags": [],
+          "data_coverage": 0.713
+        }
+      ],
+      "thesis": "[ILLUSTRATIVE SAMPLE — invented company] An illustrative specialty-materials maker screening cheap with a defensible niche; signals are constructive but not unanimous.",
+      "bull_case": [
+        "[SAMPLE] Proprietary formulations support pricing power.",
+        "[SAMPLE] Valuation discount to invented specialty-chem peers."
+      ],
+      "bear_case": [
+        "[SAMPLE] Raw-material cost pass-through can lag.",
+        "[SAMPLE] Moderate customer concentration."
+      ],
+      "catalysts": [
+        "[SAMPLE] New high-margin product qualification underway.",
+        "[SAMPLE] Capacity expansion completing this year."
+      ],
+      "principal_risks": [
+        "[SAMPLE] Input-cost volatility.",
+        "[SAMPLE] Regulatory changes affecting chemical handling."
+      ],
+      "valuation_summary": "[SAMPLE] Trades at an invented mid-single-digit EV/EBITDA, a discount to its (also invented) peer set.",
+      "fundamental_summary": "[SAMPLE] Illustrative double-digit revenue growth with positive free cash flow and modest leverage.",
+      "technical_summary": "[SAMPLE] Price holds above its long-term moving average in this illustrative series.",
+      "confidence_explanation": "[SAMPLE] Confidence reflects how many independent categories agree; this is fabricated demonstration data, so treat it as shape-only.",
+      "monitoring_checklist": [
+        "[SAMPLE] Track gross margin versus input costs.",
+        "[SAMPLE] Watch new-product qualification milestones."
+      ],
+      "signal_agreement": 0.6
+    }
+  ],
+  "category_weights": {
+    "value": 0.16,
+    "growth": 0.15,
+    "quality": 0.14,
+    "financial_health": 0.13,
+    "catalyst": 0.1,
+    "competitive": 0.07,
+    "management": 0.06,
+    "ownership": 0.06,
+    "momentum": 0.05,
+    "technical": 0.04,
+    "historical_analog": 0.04,
+    "risk": 0.0
+  },
+  "elapsed_seconds": 0.42,
+  "notes": [
+    "ILLUSTRATIVE SAMPLE DATA — these companies are invented to demonstrate the shape of a Convexity scan. Convexity is a research & screening tool, not a predictor and not investment advice. Nothing here reflects a real market view.",
+    "This file was produced by scripts/generate_sample.py as a fallback because a live offline scan was unavailable in the generating environment.",
+    "All five companies are fictional; tickers, names and every number are fabricated to illustrate the structure of a Convexity scan only.",
+    "Convexity surfaces names where many INDEPENDENT signals agree — it is a research & screening aid, never a predictor and never investment advice.",
+    "Sample scan: 25 candidate(s) screened, 5 analysed, 0 fetch error(s) (illustrative)."
+  ]
+}
