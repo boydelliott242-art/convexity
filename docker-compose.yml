@@ -1,0 +1,30 @@
+# Convexity — local/production compose.
+#   docker compose up --build      # API + dashboard on http://localhost:8000
+#   docker compose run --rm convexity convexity scan --top-n 5 --universe-limit 60
+services:
+  convexity:
+    build: .
+    image: convexity:latest
+    container_name: convexity
+    ports:
+      - "8000:8000"
+    environment:
+      CONVEXITY_DATA_DIR: /app/data
+      CONVEXITY_LOG_LEVEL: INFO
+      # Optional premium providers — set in a .env file next to this compose file.
+      FMP_API_KEY: ${FMP_API_KEY:-}
+      ALPHAVANTAGE_API_KEY: ${ALPHAVANTAGE_API_KEY:-}
+      SEC_USER_AGENT: ${SEC_USER_AGENT:-Convexity research (contact@example.com)}
+    volumes:
+      # Persist the disk cache + saved scans across restarts.
+      - convexity-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 25s
+
+volumes:
+  convexity-data:
