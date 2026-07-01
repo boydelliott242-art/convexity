@@ -143,6 +143,22 @@ class ValuationSnapshot(BaseModel):
     peg: Optional[float] = None
 
 
+def _as_naive_utc(value: Optional[_dt.datetime]) -> Optional[_dt.datetime]:
+    """Normalise a datetime to tz-naive UTC.
+
+    Data providers disagree on tz-awareness — yfinance emits naive UTC (via
+    ``datetime.utcnow()``) while SEC EDGAR emits aware UTC (via
+    ``datetime.now(timezone.utc)``). Mixing the two makes ``as_of`` / ``published``
+    comparisons raise ``TypeError: can't compare offset-naive and offset-aware
+    datetimes`` when the aggregator merges sources or sorts news. Coercing every
+    datetime to naive UTC on construction keeps all downstream comparisons and
+    sorts consistent and reproducible.
+    """
+    if isinstance(value, _dt.datetime) and value.tzinfo is not None:
+        return value.astimezone(_dt.timezone.utc).replace(tzinfo=None)
+    return value
+
+
 class NewsItem(BaseModel):
     """A single news headline with optional pre-computed sentiment in [-1, 1]."""
 
@@ -154,6 +170,11 @@ class NewsItem(BaseModel):
     url: Optional[str] = None
     summary: Optional[str] = None
     sentiment: Optional[float] = None
+
+    @field_validator("published")
+    @classmethod
+    def _normalise_published(cls, value: _dt.datetime) -> _dt.datetime:
+        return _as_naive_utc(value)
 
 
 class Filing(BaseModel):
@@ -280,6 +301,11 @@ class SecurityData(BaseModel):
     cap_tier: Optional[CapTier] = None
     currency: str = "USD"
     as_of: _dt.datetime
+
+    @field_validator("as_of")
+    @classmethod
+    def _normalise_as_of(cls, value: _dt.datetime) -> _dt.datetime:
+        return _as_naive_utc(value)
 
     valuation: ValuationSnapshot = Field(default_factory=ValuationSnapshot)
     fundamentals: List[FundamentalsPeriod] = Field(default_factory=list)  # newest first
