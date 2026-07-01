@@ -325,8 +325,15 @@ class QualityAnalyzer(Analyzer):
             evidence.append(
                 Evidence.from_number(
                     "Return-on-capital variability (CoV)", cov, source=source,
-                    direction="bullish" if (cov is not None and cov < 0.25) else "bearish" if (cov is not None and cov > 0.5) else "neutral",
-                    detail=f"Dispersion of returns across {len(return_durability_series)} periods; lower = more durable.",
+                    direction=(
+                        "bullish" if (cov is not None and cov < 0.25)
+                        else "bearish" if (cov is not None and cov > 0.5)
+                        else "neutral"
+                    ),
+                    detail=(
+                        f"Dispersion of returns across {len(return_durability_series)} periods; "
+                        "lower = more durable."
+                    ),
                 )
             )
             if _trend_penalty(return_durability_series) > 0.3:
@@ -374,8 +381,15 @@ class QualityAnalyzer(Analyzer):
             evidence.append(
                 Evidence.from_number(
                     "Margin variability (CoV)", mcov, source=source,
-                    direction="bullish" if (mcov is not None and mcov < 0.20) else "bearish" if (mcov is not None and mcov > 0.45) else "neutral",
-                    detail=f"Dispersion of margins across {len(margin_durability_series)} periods; lower = more durable.",
+                    direction=(
+                        "bullish" if (mcov is not None and mcov < 0.20)
+                        else "bearish" if (mcov is not None and mcov > 0.45)
+                        else "neutral"
+                    ),
+                    detail=(
+                        f"Dispersion of margins across {len(margin_durability_series)} periods; "
+                        "lower = more durable."
+                    ),
                 )
             )
             if _trend_penalty(margin_durability_series) > 0.3:
@@ -405,7 +419,11 @@ class QualityAnalyzer(Analyzer):
         evidence.append(
             Evidence.from_number(
                 "FCF / net income (cash conversion)", conversion, source=source,
-                direction="bullish" if (conversion is not None and conversion >= 0.8) else "bearish" if (conversion is not None and conversion < 0.4) else "neutral",
+                direction=(
+                    "bullish" if (conversion is not None and conversion >= 0.8)
+                    else "bearish" if (conversion is not None and conversion < 0.4)
+                    else "neutral"
+                ),
                 as_of=as_of, precision=2,
                 detail="How much reported profit becomes free cash flow.",
             )

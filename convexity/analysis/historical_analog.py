@@ -821,7 +821,6 @@ class HistoricalAnalogAnalyzer(Analyzer):
         """Return the HISTORICAL_ANALOG :class:`SubScore` for ``data`` (pure)."""
         feats = extract_features(data, ctx)
 
-        present = [f for f in feats.values() if f.value is not None]
         # Discount the spinoff_signal/news/institutional "always-computable" flags
         # when judging whether there is *real* substance to match on: require at
         # least a couple of genuinely informative fundamental/price/insider inputs.

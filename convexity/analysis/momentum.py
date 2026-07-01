@@ -305,7 +305,7 @@ class MomentumAnalyzer(Analyzer):
             abs_score = 50.0
 
         # Evidence for each available trailing return (percentages, signed).
-        for label, key, value in (
+        for label, _key, value in (
             ("1-month return", "ret_1m", ret_1m),
             ("3-month return", "ret_3m", ret_3m),
             ("6-month return", "ret_6m", ret_6m),

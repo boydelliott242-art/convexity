@@ -63,13 +63,13 @@ def get_company(ticker: str) -> CompanyResponse:
                 f"No data is available for '{symbol.upper()}': {exc}. "
                 "This reflects data availability, not a market view."
             ),
-        )
+        ) from exc
     except ConvexityError as exc:
         _log.warning("provider error analysing %s: %s", symbol, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Upstream data provider failed for '{symbol.upper()}': {exc}.",
-        )
+        ) from exc
 
     return CompanyResponse(analysis=analysis)
 

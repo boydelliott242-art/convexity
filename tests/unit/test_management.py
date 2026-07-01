@@ -108,7 +108,9 @@ def _strong_security() -> SecurityData:
 def _weak_security() -> SecurityData:
     """A value-destroying allocator: heavy dilution, insider selling, falling/neg ROIC."""
     funds = [
-        _period("FY2025", end=dt.date(2025, 12, 31), shares_diluted=160_000_000, roic=-0.05, free_cash_flow=-15_000_000),
+        _period(
+            "FY2025", end=dt.date(2025, 12, 31), shares_diluted=160_000_000, roic=-0.05, free_cash_flow=-15_000_000,
+        ),
         _period("FY2024", end=dt.date(2024, 12, 31), shares_diluted=130_000_000, roic=0.02, free_cash_flow=-5_000_000),
         _period("FY2023", end=dt.date(2023, 12, 31), shares_diluted=100_000_000, roic=0.06, free_cash_flow=2_000_000),
     ]

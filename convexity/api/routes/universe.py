@@ -119,7 +119,7 @@ def universe_preview(
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"Universe screen failed: {exc}.",
-        )
+        ) from exc
 
     # De-duplicate while preserving order, normalise casing, and bound the count.
     seen: set = set()

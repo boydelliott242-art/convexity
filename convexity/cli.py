@@ -450,7 +450,7 @@ def scan(
             result = pipeline.scan(params, progress=progress)
     except KeyboardInterrupt:  # pragma: no cover - interactive
         _err("\n[aborted] Scan interrupted by user.")
-        raise typer.Exit(code=130)
+        raise typer.Exit(code=130) from None
     except ConvexityError as exc:
         _err(f"[error] Scan failed: {exc}")
         raise typer.Exit(code=1) from exc
@@ -502,7 +502,7 @@ def analyze(
         analysis = pipeline.analyze_one(symbol)
     except KeyboardInterrupt:  # pragma: no cover - interactive
         _err("\n[aborted] Analysis interrupted by user.")
-        raise typer.Exit(code=130)
+        raise typer.Exit(code=130) from None
     except ConvexityError as exc:
         _err(f"[error] Could not analyse {symbol}: {exc}")
         raise typer.Exit(code=1) from exc
@@ -574,7 +574,7 @@ def universe(
         )
     except KeyboardInterrupt:  # pragma: no cover - interactive
         _err("\n[aborted] Universe build interrupted by user.")
-        raise typer.Exit(code=130)
+        raise typer.Exit(code=130) from None
     except Exception as exc:  # pragma: no cover - defensive top-level guard
         _err(f"[error] Could not build the universe: {exc}")
         raise typer.Exit(code=1) from exc
@@ -619,7 +619,7 @@ def serve(
         uvicorn.run("convexity.api.app:app", host=host, port=port, reload=reload)
     except KeyboardInterrupt:  # pragma: no cover - interactive
         _err("\n[stopped] Server interrupted by user.")
-        raise typer.Exit(code=130)
+        raise typer.Exit(code=130) from None
     except Exception as exc:  # pragma: no cover - server/runtime dependent
         _err(f"[error] Could not start the API server: {exc}")
         raise typer.Exit(code=1) from exc
@@ -675,7 +675,7 @@ def main() -> None:
         app()
     except KeyboardInterrupt:  # pragma: no cover - interactive
         _err("\n[aborted] Interrupted by user.")
-        raise SystemExit(130)
+        raise SystemExit(130) from None
 
 
 __all__ = ["app", "main"]
