@@ -50,3 +50,6 @@ coverage.xml
 .ruff_cache/
 __pycache__/
 *.egg-info/
+
+# Claude Code local preview config (machine-specific paths)
+.claude/
