@@ -67,8 +67,12 @@ function updateModePill() {
   const pill = $("#modePill");
   if (state.live) { pill.className = "mode-pill live"; pill.innerHTML = '<span class="dot"></span> Live · API connected'; }
   else { pill.className = "mode-pill demo"; pill.innerHTML = '<span class="dot"></span> Demo · sample data'; }
-  $("#runBtn").disabled = !state.live;
-  $("#runBtn").title = state.live ? "" : "Start the backend (convexity serve) to run live scans";
+  // Keep the Run button clickable even in demo mode — instead of a dead greyed-out
+  // button, a click explains that live scans need the local backend.
+  $("#runBtn").disabled = false;
+  $("#runBtn").title = state.live ? "Run a live scan" : "Live scans need the local backend — click to see how";
+  const note = $("#demoNote");
+  if (note) note.style.display = state.live ? "none" : "flex";
 }
 
 function applyScan(scan) {
@@ -301,8 +305,40 @@ function wireControls() {
   $("#runBtn").addEventListener("click", doScan);
 }
 
+function showBackendModal() {
+  if ($("#backendModal")) return;
+  const el = document.createElement("div");
+  el.id = "backendModal";
+  el.innerHTML = `
+    <div class="bm-backdrop"></div>
+    <div class="bm-card" role="dialog" aria-modal="true">
+      <div class="bm-title">This is the live demo — running on sample data</div>
+      <p class="bm-body">
+        You're viewing Convexity on GitHub&nbsp;Pages, which is a <b>static site with no backend</b>,
+        so there's nothing for a live scan to talk to. That's why <b>Run scan</b> can't execute here.
+      </p>
+      <p class="bm-body">To run real scans against live market data, start the backend on your machine:</p>
+      <pre class="bm-code">git clone https://github.com/boydelliott242-art/convexity.git
+cd convexity
+python3 -m venv .venv &amp;&amp; source .venv/bin/activate
+pip install -e ".[dev]"
+convexity serve            <span class="bm-cmt"># then open http://localhost:8000</span></pre>
+      <p class="bm-body">On <code>localhost:8000</code> the button runs a full live scan with progress. Prefer the terminal? <code>convexity scan --top-n 5</code>.</p>
+      <div class="bm-actions">
+        <button class="btn ghost" id="bmSample">Explore the sample instead</button>
+        <button class="btn primary" id="bmClose">Got it</button>
+      </div>
+    </div>`;
+  document.body.appendChild(el);
+  const close = () => el.remove();
+  el.querySelector(".bm-backdrop").addEventListener("click", close);
+  el.querySelector("#bmClose").addEventListener("click", close);
+  el.querySelector("#bmSample").addEventListener("click", async () => { close(); try { applyScan(await loadSample()); toast("Showing the bundled sample scan"); } catch (_e) {} });
+  document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
+}
+
 async function doScan() {
-  if (!state.live) { toast("Live scans need the backend (convexity serve)"); return; }
+  if (!state.live) { showBackendModal(); return; }
   const params = {
     min_market_cap: Number($("#minCap").value),
     max_market_cap: Number($("#maxCap").value),
