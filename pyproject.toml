@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "convexity"
+version = "0.1.0"
+description = "Evidence-driven small-cap & micro-cap equity research and screening platform (research tool, not investment advice)."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Convexity contributors" }]
+keywords = ["equities", "research", "screening", "small-cap", "micro-cap", "fundamentals"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Financial and Insurance Industry",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Office/Business :: Financial :: Investment",
+]
+
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn>=0.27",
+    "pydantic>=2.5,<3",
+    "pydantic-settings>=2.1",
+    "typer>=0.9",
+    "httpx>=0.26",
+    "requests>=2.31",
+    "pandas>=2.0",
+    "numpy>=1.24",
+    "yfinance>=0.2.37",
+    "beautifulsoup4>=4.12",
+    "lxml>=5.0",
+    "diskcache>=5.6",
+    "typing-extensions>=4.8",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "responses>=0.25",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+convexity = "convexity.cli:app"
+
+[project.urls]
+Homepage = "https://github.com/convexity/convexity"
+Documentation = "https://github.com/convexity/convexity/blob/main/ARCHITECTURE.md"
+
+[tool.setuptools.packages.find]
+include = ["convexity*"]
+
+[tool.ruff]
+line-length = 110
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+ignore = [
+    "B008",  # typer/FastAPI use callables in argument defaults by design.
+    # The codebase deliberately targets Python 3.9 and uses explicit typing
+    # generics (List/Optional) with `from __future__ import annotations`. The
+    # following pyupgrade rules push 3.10+ syntax (list[...], X | None) that we
+    # avoid on purpose — `X | None` in evaluated positions breaks under 3.9.
+    "UP006",  # non-pep585-annotation  (keep typing.List over list)
+    "UP035",  # deprecated-import      (keep importing from typing)
+    "UP045",  # non-pep604-annotation  (keep Optional[X] over X | None)
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-q"

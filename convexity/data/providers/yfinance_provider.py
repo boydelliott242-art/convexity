@@ -1,0 +1,938 @@
+"""yfinance-backed :class:`DataProvider` for Convexity.
+
+This provider assembles a :class:`~convexity.core.models.SecurityData` for a single
+ticker out of the *free* `yfinance <https://pypi.org/project/yfinance/>`_ library,
+which in turn scrapes Yahoo Finance's public, unauthenticated endpoints. Those
+endpoints are best-effort and undocumented: fields appear and disappear, coverage
+for thin micro-caps is patchy, and occasional rate-limiting or empty payloads are
+normal. Accordingly every sub-fetch here is wrapped defensively — a failure in one
+section (say, news) appends a human-readable note to ``SecurityData.data_warnings``
+and leaves the rest of the object intact rather than raising.
+
+Honesty notes
+-------------
+* This is a research/screening input, **not** a predictor and **not** advice. The
+  provider only transcribes what Yahoo reports; it never fabricates a missing
+  datum. Anything Yahoo does not supply stays ``None`` and is recorded as a
+  warning so downstream analyzers can lower their confidence.
+* Derived figures (margins, ROIC/ROE/ROA, FCF, valuation multiples) are computed
+  *only* from the raw statement line items actually present. If an input is
+  missing the derived value is left ``None`` rather than guessed.
+
+The provider advertises the capabilities ``{"prices", "fundamentals",
+"valuation", "news", "universe-screen"}``. It does **not** enumerate a universe;
+``get_universe`` is intentionally left raising
+:class:`~convexity.core.exceptions.NotSupported` (the screening universe is built
+by ``convexity/data/universe.py``).
+"""
+
+from __future__ import annotations
+
+import datetime as _dt
+import math
+from typing import Any, Dict, List, Optional, Set
+
+from convexity.core.contracts import DataProvider
+from convexity.core.exceptions import DataUnavailable, ProviderError
+from convexity.core.logging import get_logger
+from convexity.core.models import (
+    CapTier,
+    FundamentalsPeriod,
+    NewsItem,
+    PriceBar,
+    SecurityData,
+    ValuationSnapshot,
+)
+from convexity.core.registry import register_provider
+
+_log = get_logger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Small numeric helpers (pure, defensive)
+# ---------------------------------------------------------------------------
+
+
+def _is_finite_number(value: Any) -> bool:
+    """Return True only for a real, finite int/float (rejects None, NaN, inf, bool)."""
+    if value is None or isinstance(value, bool):
+        return False
+    if not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (TypeError, ValueError):
+        return False
+
+
+def _to_float(value: Any) -> Optional[float]:
+    """Coerce ``value`` to a finite ``float``; return ``None`` for anything else.
+
+    Pandas frequently yields ``NaN`` (a float that is not a number) for missing
+    cells; treating those as ``None`` is essential so a gap never masquerades as a
+    real zero.
+    """
+    if not _is_finite_number(value):
+        return None
+    return float(value)
+
+
+def _safe_div(numerator: Optional[float], denominator: Optional[float]) -> Optional[float]:
+    """Divide two optionals, returning ``None`` if either is missing or the denom is ~0."""
+    if numerator is None or denominator is None:
+        return None
+    if abs(denominator) < 1e-12:
+        return None
+    result = numerator / denominator
+    return result if math.isfinite(result) else None
+
+
+def _coerce_date(value: Any) -> Optional[_dt.date]:
+    """Best-effort coercion of a pandas/py datetime-ish value to a ``datetime.date``."""
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value.date()
+    if isinstance(value, _dt.date):
+        return value
+    # pandas.Timestamp exposes .to_pydatetime(); numpy datetime64 exposes .astype.
+    to_py = getattr(value, "to_pydatetime", None)
+    if callable(to_py):
+        try:
+            return to_py().date()
+        except Exception:  # pragma: no cover - defensive
+            return None
+    date_attr = getattr(value, "date", None)
+    if callable(date_attr):
+        try:
+            return date_attr()
+        except Exception:  # pragma: no cover - defensive
+            return None
+    return None
+
+
+def _coerce_datetime(value: Any) -> Optional[_dt.datetime]:
+    """Best-effort coercion of a value to a timezone-naive ``datetime``."""
+    if value is None:
+        return None
+    if isinstance(value, _dt.datetime):
+        return value.replace(tzinfo=None) if value.tzinfo else value
+    if isinstance(value, _dt.date):
+        return _dt.datetime(value.year, value.month, value.day)
+    if _is_finite_number(value):
+        # Yahoo news timestamps are unix epoch seconds.
+        try:
+            return _dt.datetime.utcfromtimestamp(float(value))
+        except (OverflowError, OSError, ValueError):  # pragma: no cover - defensive
+            return None
+    if isinstance(value, str):
+        text = value.strip().replace("Z", "+00:00")
+        for parser in (
+            lambda s: _dt.datetime.fromisoformat(s),
+            lambda s: _dt.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S"),
+            lambda s: _dt.datetime.strptime(s, "%Y-%m-%d"),
+        ):
+            try:
+                parsed = parser(text)
+                return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+            except (ValueError, TypeError):
+                continue
+    to_py = getattr(value, "to_pydatetime", None)
+    if callable(to_py):
+        try:
+            parsed = to_py()
+            return parsed.replace(tzinfo=None) if parsed.tzinfo else parsed
+        except Exception:  # pragma: no cover - defensive
+            return None
+    return None
+
+
+def _classify_cap_tier(market_cap: Optional[float]) -> Optional[CapTier]:
+    """Bucket a market cap into a :class:`CapTier` using the documented thresholds.
+
+    Thresholds mirror ``CapTier`` in ``convexity.core.models``: nano ``< ~$50M``,
+    micro ``~$50M–$300M``, small ``~$300M–$2B``. A cap at or above ~$2B is outside
+    the small-cap remit and returns ``None`` so the universe layer can exclude it.
+    """
+    if market_cap is None or market_cap <= 0:
+        return None
+    if market_cap < 50_000_000:
+        return CapTier.NANO
+    if market_cap < 300_000_000:
+        return CapTier.MICRO
+    if market_cap < 2_000_000_000:
+        return CapTier.SMALL
+    return None
+
+
+# Mapping of FundamentalsPeriod line-item -> the candidate row labels yfinance may
+# use in its income / cash-flow / balance-sheet frames. Yahoo's row names drift
+# across versions, so several aliases are tried in order.
+_INCOME_ROW_ALIASES: Dict[str, List[str]] = {
+    "revenue": ["Total Revenue", "TotalRevenue", "Operating Revenue", "OperatingRevenue"],
+    "gross_profit": ["Gross Profit", "GrossProfit"],
+    "operating_income": ["Operating Income", "OperatingIncome", "Total Operating Income As Reported"],
+    "net_income": ["Net Income", "NetIncome", "Net Income Common Stockholders", "NetIncomeCommonStockholders"],
+    "ebitda": ["EBITDA", "Normalized EBITDA", "NormalizedEBITDA"],
+    "eps_diluted": ["Diluted EPS", "DilutedEPS"],
+    "interest_expense": ["Interest Expense", "InterestExpense", "Interest Expense Non Operating"],
+    "shares_diluted": ["Diluted Average Shares", "DilutedAverageShares", "Diluted Shares"],
+}
+
+_CASHFLOW_ROW_ALIASES: Dict[str, List[str]] = {
+    "operating_cash_flow": [
+        "Operating Cash Flow",
+        "OperatingCashFlow",
+        "Cash Flow From Continuing Operating Activities",
+        "Total Cash From Operating Activities",
+    ],
+    "capex": ["Capital Expenditure", "CapitalExpenditure", "Capital Expenditures"],
+    "free_cash_flow": ["Free Cash Flow", "FreeCashFlow"],
+}
+
+_BALANCE_ROW_ALIASES: Dict[str, List[str]] = {
+    "total_assets": ["Total Assets", "TotalAssets"],
+    "total_debt": ["Total Debt", "TotalDebt"],
+    "long_term_debt": ["Long Term Debt", "LongTermDebt"],
+    "current_debt": ["Current Debt", "CurrentDebt", "Current Debt And Capital Lease Obligation"],
+    "cash_and_equivalents": [
+        "Cash And Cash Equivalents",
+        "CashAndCashEquivalents",
+        "Cash Cash Equivalents And Short Term Investments",
+    ],
+    "total_equity": [
+        "Stockholders Equity",
+        "StockholdersEquity",
+        "Total Equity Gross Minority Interest",
+        "Total Stockholder Equity",
+    ],
+    "current_assets": ["Current Assets", "CurrentAssets", "Total Current Assets"],
+    "current_liabilities": ["Current Liabilities", "CurrentLiabilities", "Total Current Liabilities"],
+    "inventory": ["Inventory", "Inventories"],
+    "shares_outstanding": ["Ordinary Shares Number", "Share Issued", "OrdinarySharesNumber"],
+}
+
+
+@register_provider
+class YFinanceProvider(DataProvider):
+    """Build a :class:`SecurityData` for one ticker from the free yfinance/Yahoo feed.
+
+    The provider performs several independent sub-fetches (company info, annual and
+    quarterly statements, valuation multiples, ~2 years of daily bars, recent
+    news). Each is isolated in its own ``try``/``except`` so a partial Yahoo
+    outage degrades coverage gracefully instead of failing the whole ticker. Only
+    a total inability to identify the security (no info *and* no price history)
+    raises :class:`~convexity.core.exceptions.DataUnavailable`.
+    """
+
+    # How much history to request. ``2y`` of daily bars is enough for the
+    # technical/momentum analyzers without bloating the payload.
+    _PRICE_PERIOD = "2y"
+    _PRICE_INTERVAL = "1d"
+    # Cap on how many annual / quarterly periods and news items we keep.
+    _MAX_ANNUAL_PERIODS = 5
+    _MAX_QUARTERLY_PERIODS = 1
+    _MAX_NEWS = 25
+
+    @property
+    def name(self) -> str:
+        """Stable identifier recorded in ``SecurityData.data_sources``."""
+        return "yfinance"
+
+    @property
+    def capabilities(self) -> Set[str]:
+        """Capabilities advertised to the aggregator."""
+        return {"prices", "fundamentals", "valuation", "news", "universe-screen"}
+
+    # -- public contract ---------------------------------------------------
+
+    def get_security_data(self, ticker: str) -> SecurityData:
+        """Assemble everything yfinance can supply for ``ticker``.
+
+        Never raises on a single missing field; partial failures are recorded in
+        ``SecurityData.data_warnings``. Raises
+        :class:`~convexity.core.exceptions.DataUnavailable` only when the ticker
+        cannot be identified at all, and
+        :class:`~convexity.core.exceptions.ProviderError` if the yfinance library
+        itself is unavailable.
+        """
+        symbol = (ticker or "").strip().upper()
+        if not symbol:
+            raise DataUnavailable("empty ticker symbol", ticker=ticker)
+
+        yf = self._import_yfinance()
+        warnings: List[str] = []
+
+        try:
+            yf_ticker = yf.Ticker(symbol)
+        except Exception as exc:  # pragma: no cover - constructor rarely fails
+            raise ProviderError(
+                f"yfinance could not construct a Ticker for {symbol!r}: {exc}",
+                provider=self.name,
+            ) from exc
+
+        info = self._fetch_info(yf_ticker, symbol, warnings)
+        price_history = self._fetch_prices(yf_ticker, symbol, warnings)
+
+        # Hard guard: if we have neither identifying info nor any prices, Yahoo has
+        # nothing for this symbol — treat it as an expected gap, not a crash.
+        if not info and not price_history:
+            raise DataUnavailable(
+                f"yfinance returned no info and no price history for {symbol!r}",
+                ticker=symbol,
+            )
+
+        name = self._extract_name(info, symbol)
+        market_cap = _to_float(info.get("marketCap")) if info else None
+
+        fundamentals = self._fetch_fundamentals(yf_ticker, symbol, warnings)
+        valuation = self._build_valuation(info, fundamentals, market_cap)
+        news = self._fetch_news(yf_ticker, symbol, warnings)
+
+        sec = SecurityData(
+            ticker=symbol,
+            name=name,
+            sector=self._clean_str(info.get("sector")) if info else None,
+            industry=self._clean_str(info.get("industry")) if info else None,
+            exchange=self._extract_exchange(info),
+            cap_tier=_classify_cap_tier(market_cap),
+            currency=self._extract_currency(info),
+            as_of=_dt.datetime.utcnow(),
+            valuation=valuation,
+            fundamentals=fundamentals,
+            price_history=price_history,
+            news=news,
+            data_sources=[self.name],
+            data_warnings=warnings,
+        )
+        _log.debug(
+            "yfinance assembled %s: %d fundamentals, %d bars, %d news, %d warnings",
+            symbol,
+            len(fundamentals),
+            len(price_history),
+            len(news),
+            len(warnings),
+        )
+        return sec
+
+    # -- yfinance import ---------------------------------------------------
+
+    @staticmethod
+    def _import_yfinance() -> Any:
+        """Import yfinance lazily so the package imports even when it is absent.
+
+        Importing at call-time (rather than module top-level) keeps the provider
+        registrable on a machine without yfinance installed; the error only
+        surfaces when someone actually requests data.
+        """
+        try:
+            import yfinance as yf  # type: ignore import-not-found
+        except Exception as exc:  # pragma: no cover - environment dependent
+            raise ProviderError(
+                "the 'yfinance' library is not installed; cannot fetch data",
+                provider="yfinance",
+            ) from exc
+        return yf
+
+    # -- info --------------------------------------------------------------
+
+    def _fetch_info(self, yf_ticker: Any, symbol: str, warnings: List[str]) -> Dict[str, Any]:
+        """Return Yahoo's ``info`` dict, or an empty dict on failure."""
+        try:
+            info = getattr(yf_ticker, "info", None)
+            if isinstance(info, dict) and info:
+                return info
+            # Newer yfinance prefers get_info(); fall back to it.
+            getter = getattr(yf_ticker, "get_info", None)
+            if callable(getter):
+                fetched = getter()
+                if isinstance(fetched, dict) and fetched:
+                    return fetched
+            warnings.append(f"{symbol}: yfinance returned no company info.")
+            return {}
+        except Exception as exc:
+            warnings.append(f"{symbol}: failed to fetch company info ({type(exc).__name__}: {exc}).")
+            return {}
+
+    @staticmethod
+    def _clean_str(value: Any) -> Optional[str]:
+        """Return a stripped non-empty string, or ``None``."""
+        if not isinstance(value, str):
+            return None
+        text = value.strip()
+        return text or None
+
+    def _extract_name(self, info: Dict[str, Any], symbol: str) -> str:
+        """Pick the best available company name, falling back to the symbol itself."""
+        for key in ("longName", "shortName", "displayName"):
+            name = self._clean_str(info.get(key)) if info else None
+            if name:
+                return name
+        return symbol
+
+    def _extract_exchange(self, info: Dict[str, Any]) -> Optional[str]:
+        """Prefer a human-readable exchange name, else the exchange code."""
+        if not info:
+            return None
+        for key in ("fullExchangeName", "exchange", "exchangeName"):
+            value = self._clean_str(info.get(key))
+            if value:
+                return value
+        return None
+
+    def _extract_currency(self, info: Dict[str, Any]) -> str:
+        """Return the reporting currency, defaulting to USD when unspecified."""
+        if info:
+            cur = self._clean_str(info.get("currency") or info.get("financialCurrency"))
+            if cur:
+                return cur.upper()
+        return "USD"
+
+    # -- prices ------------------------------------------------------------
+
+    def _fetch_prices(self, yf_ticker: Any, symbol: str, warnings: List[str]) -> List[PriceBar]:
+        """Fetch ~2 years of daily OHLCV bars, oldest-first; ``[]`` on failure."""
+        try:
+            hist = yf_ticker.history(
+                period=self._PRICE_PERIOD,
+                interval=self._PRICE_INTERVAL,
+                auto_adjust=False,
+                actions=False,
+            )
+        except Exception as exc:
+            warnings.append(f"{symbol}: failed to fetch price history ({type(exc).__name__}: {exc}).")
+            return []
+
+        if hist is None or getattr(hist, "empty", True):
+            warnings.append(f"{symbol}: yfinance returned no price history.")
+            return []
+
+        bars: List[PriceBar] = []
+        skipped = 0
+        try:
+            columns = {str(c).lower(): c for c in hist.columns}
+            col_open = columns.get("open")
+            col_high = columns.get("high")
+            col_low = columns.get("low")
+            col_close = columns.get("close")
+            col_adj = columns.get("adj close") or columns.get("adjclose")
+            col_vol = columns.get("volume")
+
+            for idx, row in hist.iterrows():
+                bar_date = _coerce_date(idx)
+                close = _to_float(row[col_close]) if col_close is not None else None
+                if bar_date is None or close is None:
+                    skipped += 1
+                    continue
+                open_ = _to_float(row[col_open]) if col_open is not None else None
+                high = _to_float(row[col_high]) if col_high is not None else None
+                low = _to_float(row[col_low]) if col_low is not None else None
+                volume = _to_float(row[col_vol]) if col_vol is not None else None
+                adj_close = _to_float(row[col_adj]) if col_adj is not None else None
+                bars.append(
+                    PriceBar(
+                        date=bar_date,
+                        open=open_ if open_ is not None else close,
+                        high=high if high is not None else close,
+                        low=low if low is not None else close,
+                        close=close,
+                        adj_close=adj_close,
+                        volume=volume if volume is not None else 0.0,
+                    )
+                )
+        except Exception as exc:
+            warnings.append(f"{symbol}: error parsing price history ({type(exc).__name__}: {exc}).")
+
+        bars.sort(key=lambda b: b.date)  # oldest first, per SecurityData contract
+        if skipped:
+            warnings.append(f"{symbol}: skipped {skipped} price rows with missing date/close.")
+        if not bars:
+            warnings.append(f"{symbol}: no usable price bars after parsing.")
+        return bars
+
+    # -- fundamentals ------------------------------------------------------
+
+    def _fetch_fundamentals(
+        self, yf_ticker: Any, symbol: str, warnings: List[str]
+    ) -> List[FundamentalsPeriod]:
+        """Build annual (+ latest quarter) :class:`FundamentalsPeriod` rows, newest-first."""
+        annual = self._fetch_statement_set(
+            yf_ticker,
+            symbol,
+            warnings,
+            income_attr="financials",
+            cashflow_attr="cashflow",
+            balance_attr="balance_sheet",
+            label_prefix="FY",
+            quarterly=False,
+            limit=self._MAX_ANNUAL_PERIODS,
+        )
+        quarterly = self._fetch_statement_set(
+            yf_ticker,
+            symbol,
+            warnings,
+            income_attr="quarterly_financials",
+            cashflow_attr="quarterly_cashflow",
+            balance_attr="quarterly_balance_sheet",
+            label_prefix="Q",
+            quarterly=True,
+            limit=self._MAX_QUARTERLY_PERIODS,
+        )
+
+        # Merge: keep the latest quarter ahead of the annuals (newest-first), but
+        # avoid duplicating a period that the annual frame already covers.
+        periods: List[FundamentalsPeriod] = []
+        seen: Set[_dt.date] = set()
+        for period in quarterly + annual:
+            if period.period_end in seen:
+                continue
+            seen.add(period.period_end)
+            periods.append(period)
+        periods.sort(key=lambda p: p.period_end, reverse=True)  # newest first
+
+        if not periods:
+            warnings.append(f"{symbol}: no fundamentals (income/cash-flow/balance-sheet) available.")
+        return periods
+
+    def _fetch_statement_set(
+        self,
+        yf_ticker: Any,
+        symbol: str,
+        warnings: List[str],
+        *,
+        income_attr: str,
+        cashflow_attr: str,
+        balance_attr: str,
+        label_prefix: str,
+        quarterly: bool,
+        limit: int,
+    ) -> List[FundamentalsPeriod]:
+        """Read one trio of statement frames and map each period column to a model."""
+        income = self._read_statement_frame(yf_ticker, income_attr, symbol, warnings)
+        cashflow = self._read_statement_frame(yf_ticker, cashflow_attr, symbol, warnings)
+        balance = self._read_statement_frame(yf_ticker, balance_attr, symbol, warnings)
+
+        # Period columns come from whichever frame is present; income is primary.
+        period_dates = self._collect_period_dates(income, cashflow, balance)
+        if not period_dates:
+            return []
+
+        periods: List[FundamentalsPeriod] = []
+        for col, period_end in period_dates[:limit]:
+            try:
+                period = self._build_period(
+                    period_end=period_end,
+                    label=self._period_label(period_end, label_prefix, quarterly),
+                    income_col=self._column_values(income, col),
+                    cashflow_col=self._column_values(cashflow, col),
+                    balance_col=self._column_values(balance, col),
+                )
+                periods.append(period)
+            except Exception as exc:  # defensive: one bad column never kills the rest
+                warnings.append(
+                    f"{symbol}: failed to map {'quarter' if quarterly else 'year'} "
+                    f"ending {period_end} ({type(exc).__name__}: {exc})."
+                )
+        return periods
+
+    @staticmethod
+    def _read_statement_frame(yf_ticker: Any, attr: str, symbol: str, warnings: List[str]) -> Any:
+        """Return a yfinance statement DataFrame (or ``None``) without raising."""
+        try:
+            frame = getattr(yf_ticker, attr, None)
+            if frame is None or getattr(frame, "empty", True):
+                return None
+            return frame
+        except Exception as exc:
+            warnings.append(f"{symbol}: failed to fetch {attr} ({type(exc).__name__}: {exc}).")
+            return None
+
+    @staticmethod
+    def _collect_period_dates(*frames: Any) -> List[Any]:
+        """Union the column labels across frames, returning ``[(col, date)]`` newest-first."""
+        seen: Dict[_dt.date, Any] = {}
+        for frame in frames:
+            if frame is None:
+                continue
+            for col in list(getattr(frame, "columns", [])):
+                col_date = _coerce_date(col)
+                if col_date is not None and col_date not in seen:
+                    seen[col_date] = col
+        ordered = sorted(seen.items(), key=lambda kv: kv[0], reverse=True)
+        return [(col, col_date) for col_date, col in ordered]
+
+    @staticmethod
+    def _column_values(frame: Any, col: Any) -> Dict[str, Any]:
+        """Extract one period column from a frame as a ``{row_label: value}`` dict."""
+        if frame is None or col is None:
+            return {}
+        try:
+            if col not in frame.columns:
+                return {}
+            series = frame[col]
+            return {str(idx): val for idx, val in series.items()}
+        except Exception:  # pragma: no cover - defensive
+            return {}
+
+    @staticmethod
+    def _period_label(period_end: _dt.date, prefix: str, quarterly: bool) -> str:
+        """Render a human period label, e.g. ``FY2025`` or ``Q1 2026``."""
+        if quarterly:
+            quarter = (period_end.month - 1) // 3 + 1
+            return f"Q{quarter} {period_end.year}"
+        return f"{prefix}{period_end.year}"
+
+    @staticmethod
+    def _pick(values: Dict[str, Any], aliases: List[str]) -> Optional[float]:
+        """Return the first finite value among ``aliases`` (case-insensitive)."""
+        if not values:
+            return None
+        # Direct hits first (cheap), then a case-insensitive scan.
+        for alias in aliases:
+            if alias in values:
+                num = _to_float(values[alias])
+                if num is not None:
+                    return num
+        lowered = {str(k).lower(): v for k, v in values.items()}
+        for alias in aliases:
+            key = alias.lower()
+            if key in lowered:
+                num = _to_float(lowered[key])
+                if num is not None:
+                    return num
+        return None
+
+    def _build_period(
+        self,
+        *,
+        period_end: _dt.date,
+        label: str,
+        income_col: Dict[str, Any],
+        cashflow_col: Dict[str, Any],
+        balance_col: Dict[str, Any],
+    ) -> FundamentalsPeriod:
+        """Map one period's raw statement rows into a :class:`FundamentalsPeriod`.
+
+        Derived margins, returns and FCF are computed only from line items that
+        are actually present; any missing input leaves the derived field ``None``.
+        """
+        # --- raw line items ---
+        revenue = self._pick(income_col, _INCOME_ROW_ALIASES["revenue"])
+        gross_profit = self._pick(income_col, _INCOME_ROW_ALIASES["gross_profit"])
+        operating_income = self._pick(income_col, _INCOME_ROW_ALIASES["operating_income"])
+        net_income = self._pick(income_col, _INCOME_ROW_ALIASES["net_income"])
+        ebitda = self._pick(income_col, _INCOME_ROW_ALIASES["ebitda"])
+        eps_diluted = self._pick(income_col, _INCOME_ROW_ALIASES["eps_diluted"])
+        interest_expense = self._pick(income_col, _INCOME_ROW_ALIASES["interest_expense"])
+        shares_from_income = self._pick(income_col, _INCOME_ROW_ALIASES["shares_diluted"])
+
+        operating_cash_flow = self._pick(cashflow_col, _CASHFLOW_ROW_ALIASES["operating_cash_flow"])
+        capex = self._pick(cashflow_col, _CASHFLOW_ROW_ALIASES["capex"])
+        free_cash_flow = self._pick(cashflow_col, _CASHFLOW_ROW_ALIASES["free_cash_flow"])
+
+        total_assets = self._pick(balance_col, _BALANCE_ROW_ALIASES["total_assets"])
+        total_debt = self._pick(balance_col, _BALANCE_ROW_ALIASES["total_debt"])
+        long_term_debt = self._pick(balance_col, _BALANCE_ROW_ALIASES["long_term_debt"])
+        current_debt = self._pick(balance_col, _BALANCE_ROW_ALIASES["current_debt"])
+        cash = self._pick(balance_col, _BALANCE_ROW_ALIASES["cash_and_equivalents"])
+        total_equity = self._pick(balance_col, _BALANCE_ROW_ALIASES["total_equity"])
+        current_assets = self._pick(balance_col, _BALANCE_ROW_ALIASES["current_assets"])
+        current_liabilities = self._pick(balance_col, _BALANCE_ROW_ALIASES["current_liabilities"])
+        inventory = self._pick(balance_col, _BALANCE_ROW_ALIASES["inventory"])
+        shares_from_balance = self._pick(balance_col, _BALANCE_ROW_ALIASES["shares_outstanding"])
+
+        shares_diluted = shares_from_income if shares_from_income is not None else shares_from_balance
+
+        # If total debt isn't reported directly, reconstruct it from the parts.
+        if total_debt is None:
+            debt_parts = [d for d in (long_term_debt, current_debt) if d is not None]
+            if debt_parts:
+                total_debt = sum(debt_parts)
+
+        # Free cash flow = operating cash flow + capex (capex is reported negative
+        # by Yahoo, so addition is correct).
+        if free_cash_flow is None and operating_cash_flow is not None and capex is not None:
+            free_cash_flow = operating_cash_flow + capex
+
+        # --- derived margins (fractions) ---
+        gross_margin = _safe_div(gross_profit, revenue)
+        operating_margin = _safe_div(operating_income, revenue)
+        fcf_margin = _safe_div(free_cash_flow, revenue)
+
+        # --- returns ---
+        roe = _safe_div(net_income, total_equity)
+        roa = _safe_div(net_income, total_assets)
+        roic = self._compute_roic(
+            operating_income=operating_income,
+            net_income=net_income,
+            total_debt=total_debt,
+            total_equity=total_equity,
+            cash=cash,
+        )
+
+        # --- liquidity & solvency ---
+        current_ratio = _safe_div(current_assets, current_liabilities)
+        quick_assets = None
+        if current_assets is not None:
+            quick_assets = current_assets - (inventory if inventory is not None else 0.0)
+        quick_ratio = _safe_div(quick_assets, current_liabilities)
+        debt_to_equity = _safe_div(total_debt, total_equity)
+        interest_coverage = None
+        if interest_expense is not None and abs(interest_expense) > 1e-9 and operating_income is not None:
+            # Interest expense is usually reported as a positive magnitude or a
+            # negative number; use its magnitude for the coverage ratio.
+            interest_coverage = _safe_div(operating_income, abs(interest_expense))
+
+        return FundamentalsPeriod(
+            period_end=period_end,
+            period_label=label,
+            revenue=revenue,
+            gross_profit=gross_profit,
+            operating_income=operating_income,
+            net_income=net_income,
+            ebitda=ebitda,
+            eps_diluted=eps_diluted,
+            free_cash_flow=free_cash_flow,
+            operating_cash_flow=operating_cash_flow,
+            capex=capex,
+            total_assets=total_assets,
+            total_debt=total_debt,
+            cash_and_equivalents=cash,
+            total_equity=total_equity,
+            shares_diluted=shares_diluted,
+            gross_margin=gross_margin,
+            operating_margin=operating_margin,
+            fcf_margin=fcf_margin,
+            roic=roic,
+            roe=roe,
+            roa=roa,
+            current_ratio=current_ratio,
+            quick_ratio=quick_ratio,
+            debt_to_equity=debt_to_equity,
+            interest_coverage=interest_coverage,
+        )
+
+    @staticmethod
+    def _compute_roic(
+        *,
+        operating_income: Optional[float],
+        net_income: Optional[float],
+        total_debt: Optional[float],
+        total_equity: Optional[float],
+        cash: Optional[float],
+    ) -> Optional[float]:
+        """Return on invested capital ≈ NOPAT / (debt + equity − cash).
+
+        Uses a flat 21% notional tax shield on operating income to approximate
+        NOPAT when operating income is available, otherwise falls back to net
+        income. Invested capital nets out cash. Returns ``None`` if the inputs
+        needed for a non-degenerate denominator are missing.
+        """
+        if operating_income is not None:
+            nopat: Optional[float] = operating_income * (1.0 - 0.21)
+        elif net_income is not None:
+            nopat = net_income
+        else:
+            return None
+
+        debt = total_debt if total_debt is not None else 0.0
+        equity = total_equity
+        if equity is None:
+            return None
+        invested = debt + equity - (cash if cash is not None else 0.0)
+        return _safe_div(nopat, invested)
+
+    # -- valuation ---------------------------------------------------------
+
+    @staticmethod
+    def _latest_with(
+        fundamentals: List[FundamentalsPeriod], attr: str
+    ) -> Optional[FundamentalsPeriod]:
+        """Return the newest period whose ``attr`` is populated, or ``None``.
+
+        Quarterly statements (the very latest period) frequently omit balance-sheet
+        lines; using the newest period that *actually has* the needed datum avoids
+        both fabricating a zero and discarding a usable annual figure.
+        """
+        for period in fundamentals:  # already newest-first
+            if getattr(period, attr, None) is not None:
+                return period
+        return None
+
+    def _build_valuation(
+        self,
+        info: Dict[str, Any],
+        fundamentals: List[FundamentalsPeriod],
+        market_cap: Optional[float],
+    ) -> ValuationSnapshot:
+        """Assemble a :class:`ValuationSnapshot` from Yahoo's info dict + statements.
+
+        Multiples reported directly by Yahoo are preferred. Where Yahoo omits one
+        we recompute it from ``market_cap`` and the newest fundamentals period that
+        actually carries the required input — never by treating a missing input as
+        zero. Any multiple whose inputs are absent is left ``None``.
+        """
+        info = info or {}
+        enterprise_value = _to_float(info.get("enterpriseValue"))
+        pe = _to_float(info.get("trailingPE"))
+        forward_pe = _to_float(info.get("forwardPE"))
+        ev_ebitda = _to_float(info.get("enterpriseToEbitda"))
+        ev_sales = _to_float(info.get("enterpriseToRevenue"))
+        p_b = _to_float(info.get("priceToBook"))
+        p_s = _to_float(info.get("priceToSalesTrailing12Months"))
+        peg = _to_float(info.get("pegRatio") or info.get("trailingPegRatio"))
+
+        # Reconstruct enterprise value (EV = market cap + total debt − cash) from
+        # the newest period that reports debt; cash from that same period if any.
+        if enterprise_value is None and market_cap is not None:
+            debt_period = self._latest_with(fundamentals, "total_debt")
+            if debt_period is not None:
+                debt = debt_period.total_debt or 0.0
+                cash = debt_period.cash_and_equivalents or 0.0
+                enterprise_value = market_cap + debt - cash
+
+        rev_period = self._latest_with(fundamentals, "revenue")
+        ebitda_period = self._latest_with(fundamentals, "ebitda")
+        equity_period = self._latest_with(fundamentals, "total_equity")
+        fcf_period = self._latest_with(fundamentals, "free_cash_flow")
+
+        # Recompute multiples only when Yahoo omitted them and the inputs exist.
+        if ev_ebitda is None and ebitda_period is not None:
+            ev_ebitda = _safe_div(enterprise_value, ebitda_period.ebitda)
+        if ev_sales is None and rev_period is not None:
+            ev_sales = _safe_div(enterprise_value, rev_period.revenue)
+        if p_s is None and rev_period is not None:
+            p_s = _safe_div(market_cap, rev_period.revenue)
+        if p_b is None and equity_period is not None:
+            p_b = _safe_div(market_cap, equity_period.total_equity)
+
+        # Price-to-free-cash-flow has no direct Yahoo field; derive it when possible.
+        p_fcf = None
+        if fcf_period is not None:
+            p_fcf = _safe_div(market_cap, fcf_period.free_cash_flow)
+
+        return ValuationSnapshot(
+            market_cap=market_cap,
+            enterprise_value=enterprise_value,
+            pe=pe,
+            forward_pe=forward_pe,
+            ev_ebitda=ev_ebitda,
+            ev_sales=ev_sales,
+            p_fcf=p_fcf,
+            p_b=p_b,
+            p_s=p_s,
+            peg=peg,
+        )
+
+    # -- news --------------------------------------------------------------
+
+    def _fetch_news(self, yf_ticker: Any, symbol: str, warnings: List[str]) -> List[NewsItem]:
+        """Fetch recent Yahoo news headlines, newest-first; ``[]`` on failure."""
+        try:
+            raw = getattr(yf_ticker, "news", None)
+            if not raw:
+                getter = getattr(yf_ticker, "get_news", None)
+                if callable(getter):
+                    raw = getter()
+        except Exception as exc:
+            warnings.append(f"{symbol}: failed to fetch news ({type(exc).__name__}: {exc}).")
+            return []
+
+        if not raw or not isinstance(raw, list):
+            warnings.append(f"{symbol}: no recent news returned by yfinance.")
+            return []
+
+        items: List[NewsItem] = []
+        skipped = 0
+        for entry in raw[: self._MAX_NEWS]:
+            try:
+                parsed = self._parse_news_entry(entry)
+            except Exception:  # pragma: no cover - defensive
+                parsed = None
+            if parsed is None:
+                skipped += 1
+                continue
+            items.append(parsed)
+
+        items.sort(key=lambda n: n.published, reverse=True)  # newest first
+        if skipped:
+            warnings.append(f"{symbol}: skipped {skipped} news items with no title/timestamp.")
+        return items
+
+    def _parse_news_entry(self, entry: Any) -> Optional[NewsItem]:
+        """Parse one yfinance news dict across the older and newer Yahoo schemas."""
+        if not isinstance(entry, dict):
+            return None
+        # Newer yfinance nests the payload under "content".
+        content = entry.get("content") if isinstance(entry.get("content"), dict) else entry
+
+        title = self._clean_str(content.get("title")) or self._clean_str(entry.get("title"))
+        if not title:
+            return None
+
+        published = self._extract_news_datetime(entry, content)
+        if published is None:
+            return None
+
+        source = (
+            self._extract_news_source(content)
+            or self._clean_str(entry.get("publisher"))
+            or "Yahoo Finance"
+        )
+        url = self._extract_news_url(entry, content)
+        summary = self._clean_str(content.get("summary")) or self._clean_str(content.get("description"))
+
+        return NewsItem(
+            published=published,
+            title=title,
+            source=source,
+            url=url,
+            summary=summary,
+            sentiment=None,  # honesty: we do not fabricate a sentiment score here.
+        )
+
+    @staticmethod
+    def _extract_news_datetime(entry: Dict[str, Any], content: Dict[str, Any]) -> Optional[_dt.datetime]:
+        """Resolve a publish datetime across both schemas (epoch or ISO string)."""
+        # Older schema: providerPublishTime is unix seconds.
+        epoch = entry.get("providerPublishTime")
+        dt = _coerce_datetime(epoch)
+        if dt is not None:
+            return dt
+        # Newer schema: ISO 8601 string under pubDate / displayTime.
+        for key in ("pubDate", "displayTime", "providerPublishTime"):
+            dt = _coerce_datetime(content.get(key))
+            if dt is not None:
+                return dt
+        return None
+
+    @staticmethod
+    def _extract_news_source(content: Dict[str, Any]) -> Optional[str]:
+        """Pull the publisher name from the (possibly nested) provider field."""
+        provider = content.get("provider")
+        if isinstance(provider, dict):
+            name = provider.get("displayName") or provider.get("name")
+            if isinstance(name, str) and name.strip():
+                return name.strip()
+        if isinstance(provider, str) and provider.strip():
+            return provider.strip()
+        return None
+
+    @staticmethod
+    def _extract_news_url(entry: Dict[str, Any], content: Dict[str, Any]) -> Optional[str]:
+        """Resolve the canonical article URL across both schemas."""
+        # Newer schema: content.canonicalUrl.url or content.clickThroughUrl.url
+        for key in ("canonicalUrl", "clickThroughUrl"):
+            link = content.get(key)
+            if isinstance(link, dict):
+                url = link.get("url")
+                if isinstance(url, str) and url.strip():
+                    return url.strip()
+        # Older schema: top-level "link".
+        link = entry.get("link")
+        if isinstance(link, str) and link.strip():
+            return link.strip()
+        return None
+
+
+__all__ = ["YFinanceProvider"]

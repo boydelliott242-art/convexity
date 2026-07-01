@@ -1,0 +1,148 @@
+ticker,name,sector
+CRMD,CorMedix Inc.,Healthcare
+ANIP,ANI Pharmaceuticals Inc.,Healthcare
+HRMY,Harmony Biosciences Holdings Inc.,Healthcare
+COLL,Collegium Pharmaceutical Inc.,Healthcare
+SUPN,Supernus Pharmaceuticals Inc.,Healthcare
+PCRX,Pacira BioSciences Inc.,Healthcare
+ARWR,Arrowhead Pharmaceuticals Inc.,Healthcare
+HALO,Halozyme Therapeutics Inc.,Healthcare
+LMAT,LeMaitre Vascular Inc.,Healthcare
+UTMD,Utah Medical Products Inc.,Healthcare
+CCRN,Cross Country Healthcare Inc.,Healthcare
+PHR,Phreesia Inc.,Healthcare
+TBPH,Theravance Biopharma Inc.,Healthcare
+CORT,Corcept Therapeutics Inc.,Healthcare
+VCEL,Vericel Corporation,Healthcare
+ATEC,Alphatec Holdings Inc.,Healthcare
+NARI,Inari Medical Inc.,Healthcare
+TMDX,TransMedics Group Inc.,Healthcare
+EVH,Evolent Health Inc.,Healthcare
+AMRX,Amneal Pharmaceuticals Inc.,Healthcare
+SHEN,Shenandoah Telecommunications Company,Communication Services
+CNSL,Consolidated Communications Holdings Inc.,Communication Services
+ATNI,ATN International Inc.,Communication Services
+CCOI,Cogent Communications Holdings Inc.,Communication Services
+TDS,Telephone and Data Systems Inc.,Communication Services
+GOGO,Gogo Inc.,Communication Services
+CABO,Cable One Inc.,Communication Services
+MSGE,Madison Square Garden Entertainment Corp.,Communication Services
+LGF.A,Lions Gate Entertainment Corp.,Communication Services
+SCHL,Scholastic Corporation,Communication Services
+CALX,Calix Inc.,Technology
+EXTR,Extreme Networks Inc.,Technology
+DGII,Digi International Inc.,Technology
+SMTC,Semtech Corporation,Technology
+PLXS,Plexus Corp.,Technology
+SANM,Sanmina Corporation,Technology
+BELFB,Bel Fuse Inc.,Technology
+DIOD,Diodes Incorporated,Technology
+POWI,Power Integrations Inc.,Technology
+SPSC,SPS Commerce Inc.,Technology
+PRGS,Progress Software Corporation,Technology
+AGYS,Agilysys Inc.,Technology
+ENV,Envestnet Inc.,Technology
+RAMP,LiveRamp Holdings Inc.,Technology
+CEVA,CEVA Inc.,Technology
+MXL,MaxLinear Inc.,Technology
+SYNA,Synaptics Incorporated,Technology
+NSSC,NAPCO Security Technologies Inc.,Technology
+RBBN,Ribbon Communications Inc.,Technology
+DAKT,Daktronics Inc.,Technology
+PRDO,Perdoceo Education Corporation,Consumer Discretionary
+LZB,La-Z-Boy Incorporated,Consumer Discretionary
+SCVL,Shoe Carnival Inc.,Consumer Discretionary
+HIBB,Hibbett Inc.,Consumer Discretionary
+BOOT,Boot Barn Holdings Inc.,Consumer Discretionary
+DBI,Designer Brands Inc.,Consumer Discretionary
+CRMT,America's Car-Mart Inc.,Consumer Discretionary
+MCW,Mister Car Wash Inc.,Consumer Discretionary
+MNRO,Monro Inc.,Consumer Discretionary
+PLAY,Dave & Buster's Entertainment Inc.,Consumer Discretionary
+BJRI,BJ's Restaurants Inc.,Consumer Discretionary
+DIN,Dine Brands Global Inc.,Consumer Discretionary
+CAKE,The Cheesecake Factory Incorporated,Consumer Discretionary
+RICK,RCI Hospitality Holdings Inc.,Consumer Discretionary
+HZO,MarineMax Inc.,Consumer Discretionary
+SMP,Standard Motor Products Inc.,Consumer Discretionary
+DORM,Dorman Products Inc.,Consumer Discretionary
+PATK,Patrick Industries Inc.,Consumer Discretionary
+LCII,LCI Industries,Consumer Discretionary
+CENT,Central Garden & Pet Company,Consumer Staples
+JJSF,J&J Snack Foods Corp.,Consumer Staples
+JBSS,John B. Sanfilippo & Son Inc.,Consumer Staples
+LANC,Lancaster Colony Corporation,Consumer Staples
+SENEA,Seneca Foods Corporation,Consumer Staples
+NAPA,The Duckhorn Portfolio Inc.,Consumer Staples
+USPH,U.S. Physical Therapy Inc.,Consumer Staples
+SPB,Spectrum Brands Holdings Inc.,Consumer Staples
+CALM,Cal-Maine Foods Inc.,Consumer Staples
+HELE,Helen of Troy Limited,Consumer Staples
+PRIM,Primoris Services Corporation,Industrials
+MYRG,MYR Group Inc.,Industrials
+ROAD,Construction Partners Inc.,Industrials
+GVA,Granite Construction Incorporated,Industrials
+STRL,Sterling Infrastructure Inc.,Industrials
+ATKR,Atkore Inc.,Industrials
+NPO,Enpro Inc.,Industrials
+MLI,Mueller Industries Inc.,Industrials
+GBX,The Greenbrier Companies Inc.,Industrials
+WERN,Werner Enterprises Inc.,Industrials
+SAIA,Saia Inc.,Industrials
+HUBG,Hub Group Inc.,Industrials
+MRTN,Marten Transport Ltd.,Industrials
+ATSG,Air Transport Services Group Inc.,Industrials
+KFRC,Kforce Inc.,Industrials
+HCC,Warrior Met Coal Inc.,Energy
+PTEN,Patterson-UTI Energy Inc.,Energy
+NEX,NexTier Oilfield Solutions Inc.,Energy
+PUMP,ProPetro Holding Corp.,Energy
+CRGY,Crescent Energy Company,Energy
+BRY,Berry Corporation,Energy
+TALO,Talos Energy Inc.,Energy
+NOG,Northern Oil and Gas Inc.,Energy
+DK,Delek US Holdings Inc.,Energy
+PBF,PBF Energy Inc.,Energy
+KOP,Koppers Holdings Inc.,Materials
+HWKN,Hawkins Inc.,Materials
+KRO,Kronos Worldwide Inc.,Materials
+IOSP,Innospec Inc.,Materials
+SXT,Sensient Technologies Corporation,Materials
+TROX,Tronox Holdings plc,Materials
+CMP,Compass Minerals International Inc.,Materials
+SCL,Stepan Company,Materials
+HAYN,Haynes International Inc.,Materials
+USLM,United States Lime & Minerals Inc.,Materials
+TRMK,Trustmark Corporation,Financials
+CASH,Pathward Financial Inc.,Financials
+HOPE,Hope Bancorp Inc.,Financials
+CATY,Cathay General Bancorp,Financials
+FFBC,First Financial Bancorp,Financials
+INDB,Independent Bank Corp.,Financials
+WSFS,WSFS Financial Corporation,Financials
+PRK,Park National Corporation,Financials
+NMIH,NMI Holdings Inc.,Financials
+ENVA,Enova International Inc.,Financials
+CNO,CNO Financial Group Inc.,Financials
+PRG,PROG Holdings Inc.,Financials
+UCBI,United Community Banks Inc.,Financials
+NWBI,Northwest Bancshares Inc.,Financials
+EPRT,Essential Properties Realty Trust Inc.,Real Estate
+GTY,Getty Realty Corp.,Real Estate
+LXP,LXP Industrial Trust,Real Estate
+UMH,UMH Properties Inc.,Real Estate
+ROIC,Retail Opportunity Investments Corp.,Real Estate
+SKT,Tanger Inc.,Real Estate
+NSA,National Storage Affiliates Trust,Real Estate
+IIPR,Innovative Industrial Properties Inc.,Real Estate
+SAFT,Safety Insurance Group Inc.,Financials
+NWE,NorthWestern Energy Group Inc.,Utilities
+OTTR,Otter Tail Corporation,Utilities
+NWN,Northwest Natural Holding Company,Utilities
+MGEE,MGE Energy Inc.,Utilities
+CWT,California Water Service Group,Utilities
+SJW,SJW Group,Utilities
+ARTNA,Artesian Resources Corporation,Utilities
+YORW,The York Water Company,Utilities
+GWRS,Global Water Resources Inc.,Utilities
+MSEX,Middlesex Water Company,Utilities
