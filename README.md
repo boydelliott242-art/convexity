@@ -6,10 +6,13 @@
 
 *Rare, asymmetric ideas — surfaced only when many independent signals agree.*
 
-[![CI](https://github.com/convexity/convexity/actions/workflows/ci.yml/badge.svg)](https://github.com/convexity/convexity/actions/workflows/ci.yml)
+![CI](https://img.shields.io/badge/CI-GitHub%20Actions%20ready-6e9bff)
 ![Python](https://img.shields.io/badge/python-3.9%2B-6e9bff)
 ![License](https://img.shields.io/badge/license-MIT-46e0c0)
 ![Tests](https://img.shields.io/badge/tests-313%20passing-3ed9a4)
+![Ruff](https://img.shields.io/badge/ruff-clean-46e0c0)
+
+**Live demo:** https://boydelliott242-art.github.io/convexity/ · **Repo:** https://github.com/boydelliott242-art/convexity
 
 </div>
 
@@ -56,7 +59,7 @@ invalidate the thesis.
 ## Quickstart
 
 ```bash
-git clone https://github.com/convexity/convexity.git
+git clone https://github.com/boydelliott242-art/convexity.git
 cd convexity
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"        # or: make install
@@ -173,6 +176,12 @@ make cov      # coverage report
 
 The suite covers the scoring math, ranking/conviction logic, explainability (narratives only
 restate attached evidence), every analyzer, the end-to-end pipeline, and the API.
+
+**Continuous integration.** The full CI pipeline — ruff, an all-12-analyzers-register check, and
+`pytest` across Python 3.9–3.12, followed by a Docker build + container health smoke test — ships
+at [`.github/ci.yml`](.github/ci.yml). To activate it, move the file to `.github/workflows/ci.yml`
+and push with a token that has the `workflow` scope (or paste it into GitHub's web editor, which
+does not require that scope).
 
 ## Project layout
 
