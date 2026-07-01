@@ -53,3 +53,6 @@ __pycache__/
 
 # Claude Code local preview config (machine-specific paths)
 .claude/
+
+# scan outputs & local data dir
+data/
