@@ -11,6 +11,10 @@ Securities and Exchange Commission's EDGAR system:
 * ``https://data.sec.gov/submissions/CIK##########.json`` — the recent-filings
   index, from which we build the :class:`Filing` list (form type, filed date,
   document URL).
+* ``https://www.sec.gov/Archives/edgar/data/{cik}/{accession}/{doc}`` — the raw
+  Form 4 ``ownershipDocument`` XML for each recent insider filing, from which we
+  build the :class:`InsiderTransaction` list (reporting owner, role, transaction
+  date/code/shares/price).
 
 Honesty notes (these are load-bearing, not decoration):
 
@@ -24,9 +28,9 @@ Honesty notes (these are load-bearing, not decoration):
   :attr:`Settings.sec_user_agent` on every request and apply a small inter-request
   delay so a many-ticker scan stays well-mannered.
 
-Capabilities advertised: ``{"fundamentals", "filings"}``. EDGAR does not provide
-prices, news, valuation multiples, or a screening universe, so this provider does
-not advertise those.
+Capabilities advertised: ``{"fundamentals", "filings", "insider"}``. EDGAR does
+not provide prices, news, valuation multiples, or a screening universe, so this
+provider does not advertise those.
 """
 
 from __future__ import annotations
@@ -36,6 +40,7 @@ import json
 import os
 import threading
 import time
+import xml.etree.ElementTree as _ET
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 import requests
@@ -43,7 +48,12 @@ import requests
 from convexity.core.config import Settings, get_settings
 from convexity.core.exceptions import DataUnavailable, ProviderError, RateLimited
 from convexity.core.logging import get_logger
-from convexity.core.models import Filing, FundamentalsPeriod, SecurityData
+from convexity.core.models import (
+    Filing,
+    FundamentalsPeriod,
+    InsiderTransaction,
+    SecurityData,
+)
 from convexity.core.registry import register_provider
 
 _log = get_logger(__name__)
@@ -70,6 +80,30 @@ _CIK_MAP_TTL_S = 86_400
 
 # How many of the most-recent filings to surface by default.
 _DEFAULT_FILINGS_LIMIT = 40
+
+#: Maximum number of Form 4 filings fetched and parsed per ticker. Each Form 4 is
+#: a separate Archives request, so this cap bounds both latency and SEC load for a
+#: multi-ticker scan while still capturing recent insider activity. Ten filings
+#: comfortably covers a year of insider trading at a typical small/micro-cap.
+_FORM4_MAX_FILINGS = 10
+
+#: Only Form 4 filings filed within this many days are considered "recent" insider
+#: activity (12 months). Older activity is stale for the ownership/management
+#: analyzers and is deliberately excluded rather than silently mixed in.
+_FORM4_LOOKBACK_DAYS = 365
+
+#: SEC Form 4 transaction codes → Convexity ``InsiderTransaction.transaction_type``.
+#: Only ``P`` (open-market/private purchase) and ``S`` (open-market/private sale)
+#: represent voluntary, at-risk trades; the ownership/management analyzers weight
+#: those most heavily. Everything else is mapped honestly to a non-market label
+#: (``award``, ``exercise``) or preserved verbatim as ``other:<code>`` so no
+#: compensation grant can masquerade as an open-market buy.
+_FORM4_TRANSACTION_CODE_MAP: Dict[str, str] = {
+    "P": "buy",       # open-market or private purchase
+    "S": "sell",      # open-market or private sale
+    "A": "award",     # grant, award or other acquisition (compensation, not a buy)
+    "M": "exercise",  # exercise/conversion of a derivative security
+}
 
 # US-GAAP concept → FundamentalsPeriod attribute. The first concept present for a
 # given period wins (concepts are ordered by how directly they map to the field).
@@ -319,8 +353,8 @@ class SecEdgarProvider:
 
     @property
     def capabilities(self) -> Set[str]:
-        """Capabilities EDGAR truly fills: structured fundamentals and filings."""
-        return {"fundamentals", "filings"}
+        """Capabilities EDGAR truly fills: fundamentals, filings and Form 4 insiders."""
+        return {"fundamentals", "filings", "insider"}
 
     def supports(self, capability: str) -> bool:
         """Return whether this provider advertises ``capability``."""
@@ -350,8 +384,10 @@ class SecEdgarProvider:
         )
 
         # --- Filings (from submissions) --------------------------------------
+        submissions_payload: Optional[Dict[str, Any]] = None
         try:
             submissions = self._fetch_submissions(cik)
+            submissions_payload = submissions
             if not company_name and isinstance(submissions, dict):
                 data.name = submissions.get("name") or data.name
             self._populate_company_meta(data, submissions)
@@ -362,6 +398,25 @@ class SecEdgarProvider:
             data.data_warnings.append(f"sec_edgar: filings unavailable ({exc})")
         except ProviderError as exc:
             data.data_warnings.append(f"sec_edgar: filings fetch failed ({exc})")
+
+        # --- Insider transactions (from Form 4 filings) -----------------------
+        if submissions_payload is not None:
+            try:
+                data.insider_transactions = self.get_insider_transactions(
+                    ticker_norm, cik=cik, submissions=submissions_payload
+                )
+                if not data.insider_transactions:
+                    data.data_warnings.append(
+                        "sec_edgar: no Form 4 insider transactions in the last 12 months"
+                    )
+            except (DataUnavailable, ProviderError) as exc:
+                data.data_warnings.append(
+                    f"sec_edgar: insider transactions unavailable ({exc})"
+                )
+        else:
+            data.data_warnings.append(
+                "sec_edgar: insider transactions unavailable (submissions index missing)"
+            )
 
         # --- Fundamentals (from companyfacts) --------------------------------
         try:
@@ -421,6 +476,156 @@ class SecEdgarProvider:
         except (DataUnavailable, ProviderError):
             return None
 
+    # -- Public convenience: insider transactions (Form 4) --------------------
+
+    def get_insider_transactions(
+        self,
+        ticker: str,
+        *,
+        cik: Optional[int] = None,
+        submissions: Optional[Dict[str, Any]] = None,
+    ) -> List[InsiderTransaction]:
+        """Return recent Form 4 insider transactions for ``ticker``, newest first.
+
+        Selects Form ``4`` filings from the submissions index filed within the
+        last :data:`_FORM4_LOOKBACK_DAYS` days (most recent first, capped at
+        :data:`_FORM4_MAX_FILINGS`), fetches each filing's ``ownershipDocument``
+        XML from the EDGAR Archives, and parses the non-derivative transactions
+        into :class:`InsiderTransaction` models.
+
+        Robustness contract:
+
+        * Every HTTP request goes through the shared throttle.
+        * A single *deterministically* bad Form 4 (missing XML, malformed
+          document) is skipped (logged), never fatal for the ticker.
+        * Parsed results are cached on disk under ``form4_<TICKER>`` (inside the
+          provider's ``sec_edgar`` cache namespace) so repeat scans are cheap —
+          but **only** when every selected filing was either parsed or failed for
+          a deterministic (parse/404) reason. A transient failure (network error,
+          5xx) skips the cache write so a later, healthy scan refetches instead
+          of serving a stale partial/empty list for ``cache_ttl_seconds``.
+        * A rate-limit signal (:class:`RateLimited`, i.e. HTTP 429/403) aborts
+          the Form 4 loop and propagates: continuing would just hammer the SEC,
+          and caching the partial result would later masquerade as "no insider
+          activity" — a factually false claim this provider must never make.
+
+        Args:
+            ticker: The equity ticker (case-insensitive); used for the cache key
+                and resolved to a CIK when ``cik`` is not supplied.
+            cik: Optional pre-resolved CIK (skips a company-tickers lookup).
+            submissions: Optional pre-fetched submissions payload (skips a fetch).
+
+        Returns:
+            Newest-first list of :class:`InsiderTransaction`. Empty when the
+            issuer has no recent Form 4 filings.
+
+        Raises:
+            DataUnavailable: when the ticker cannot be resolved to a CIK or the
+                submissions index is missing.
+            RateLimited: when the SEC throttles the submissions fetch *or* any
+                Form 4 fetch (aborts, so insider evidence is "unavailable", never
+                falsely "absent").
+            ProviderError: when the submissions index cannot be fetched, or when
+                every selected Form 4 filing failed for a transient reason (the
+                insider picture is unknown, not empty).
+        """
+        ticker_norm = (ticker or "").strip().upper()
+        if not ticker_norm:
+            return []
+
+        cache_key = f"form4_{ticker_norm}"
+        cached = self._cache.get(cache_key, self._settings.cache_ttl_seconds)
+        if isinstance(cached, list):
+            restored = self._restore_cached_transactions(cached)
+            if restored is not None:
+                return restored
+
+        if cik is None:
+            cik, _ = self._resolve_cik(ticker_norm)
+        if submissions is None:
+            submissions = self._fetch_submissions(cik)
+
+        selected = self._select_form4_filings(submissions)
+        transactions: List[InsiderTransaction] = []
+        transient_failures = 0
+        for accession, primary_doc in selected:
+            try:
+                xml_text = self._fetch_form4_xml(cik, accession, primary_doc)
+                transactions.extend(self._parse_form4_xml(xml_text))
+            except RateLimited:
+                # A throttle (429/403) means every further Archives fetch would be
+                # throttled too. Abort and propagate rather than silently returning
+                # (and caching) a partial/empty list that a later scan would read
+                # as "no insider activity" — insider evidence is *unavailable*
+                # right now, not absent.
+                raise
+            except (DataUnavailable, ValueError) as exc:
+                # Deterministic per-filing gap (no ownership XML, malformed XML):
+                # skip it — one bad filing never kills the ticker, and the gap is
+                # stable so the result stays cacheable.
+                _log.info(
+                    "sec_edgar: skipping Form 4 %s for %s: %s",
+                    accession,
+                    ticker_norm,
+                    exc,
+                )
+                continue
+            except ProviderError as exc:
+                # Transient fetch failure (network error, 5xx): skip the filing
+                # but remember the result is incomplete for a *transient* reason
+                # so it must not be cached as if it were the whole truth.
+                transient_failures += 1
+                _log.warning(
+                    "sec_edgar: transient failure fetching Form 4 %s for %s: %s",
+                    accession,
+                    ticker_norm,
+                    exc,
+                )
+                continue
+
+        transactions.sort(key=lambda t: t.date, reverse=True)
+        if transient_failures and not transactions:
+            # Every selected filing failed transiently: the insider picture is
+            # unknown, not empty. Raising keeps the caller from recording a
+            # factually false "no Form 4 insider transactions" warning.
+            raise ProviderError(
+                f"could not fetch any of the {len(selected)} recent Form 4 "
+                f"filing(s) for {ticker_norm} ({transient_failures} transient "
+                "failure(s)); insider activity is unknown, not absent",
+                provider=self.name,
+            )
+        if transient_failures:
+            _log.info(
+                "sec_edgar: not caching Form 4 results for %s (%d transient "
+                "failure(s) left the list incomplete)",
+                ticker_norm,
+                transient_failures,
+            )
+        else:
+            self._cache.set(
+                cache_key, [t.model_dump(mode="json") for t in transactions]
+            )
+        return transactions
+
+    @staticmethod
+    def _restore_cached_transactions(
+        cached: List[Any],
+    ) -> Optional[List[InsiderTransaction]]:
+        """Rebuild :class:`InsiderTransaction` models from a cached JSON list.
+
+        Returns ``None`` when any cached row fails validation, which forces a
+        fresh fetch rather than serving corrupt cache content.
+        """
+        out: List[InsiderTransaction] = []
+        for row in cached:
+            if not isinstance(row, dict):
+                return None
+            try:
+                out.append(InsiderTransaction.model_validate(row))
+            except Exception:  # pydantic ValidationError, without importing it here
+                return None
+        return out
+
     # -- HTTP plumbing --------------------------------------------------------
 
     def _throttle(self) -> None:
@@ -476,6 +681,49 @@ class SecEdgarProvider:
             raise ProviderError(
                 f"invalid JSON for {what}: {exc}", provider=self.name, status_code=status
             ) from exc
+
+    def _get_text(self, url: str, *, what: str) -> str:
+        """GET ``url`` and return the response body as text (for Archives XML).
+
+        Shares the throttle and error mapping of :meth:`_get_json` but does not
+        attempt JSON decoding; used for the raw Form 4 ``ownershipDocument`` XML.
+
+        Raises:
+            DataUnavailable: on a 404.
+            RateLimited: on a 429/403 throttle.
+            ProviderError: on any other HTTP or network failure.
+        """
+        self._throttle()
+        try:
+            resp = self._session.get(
+                url,
+                timeout=self._settings.request_timeout,
+                headers={"Accept": "application/xml, text/xml, */*"},
+            )
+        except requests.RequestException as exc:
+            raise ProviderError(
+                f"network error fetching {what}: {exc}", provider=self.name
+            ) from exc
+
+        status = resp.status_code
+        if status == 404:
+            raise DataUnavailable(f"{what} not found (404)", field=what)
+        if status == 429:
+            raise RateLimited(
+                f"SEC rate limit hit fetching {what}",
+                provider=self.name,
+                retry_after=_coerce_float(resp.headers.get("Retry-After")),
+            )
+        if status == 403:
+            raise RateLimited(
+                f"SEC returned 403 fetching {what} (check SEC_USER_AGENT / rate limit)",
+                provider=self.name,
+            )
+        if status >= 400:
+            raise ProviderError(
+                f"HTTP {status} fetching {what}", provider=self.name, status_code=status
+            )
+        return resp.text
 
     # -- CIK resolution -------------------------------------------------------
 
@@ -622,6 +870,205 @@ class SecEdgarProvider:
                 cik=cik, accession_nodash=nodash, primary_doc=primary_doc
             )
         return _FILING_FOLDER_URL.format(cik=cik, accession_nodash=nodash)
+
+    # -- Form 4 insider transactions -------------------------------------------
+
+    @staticmethod
+    def _select_form4_filings(
+        submissions: Dict[str, Any],
+        *,
+        today: Optional[_dt.date] = None,
+    ) -> List[Tuple[str, str]]:
+        """Select recent Form 4 filings from the submissions index.
+
+        Filters the parallel ``filings.recent`` arrays down to form ``"4"`` rows
+        filed within the last :data:`_FORM4_LOOKBACK_DAYS` days, sorts them most
+        recent first, and caps the result at :data:`_FORM4_MAX_FILINGS`.
+
+        Args:
+            submissions: The submissions index JSON payload.
+            today: Injectable "now" for deterministic tests; defaults to the
+                real current date.
+
+        Returns:
+            List of ``(accession_number, primary_document)`` tuples, newest first.
+        """
+        recent = ((submissions.get("filings") or {}).get("recent")) or {}
+        forms = recent.get("form") or []
+        dates = recent.get("filingDate") or []
+        accessions = recent.get("accessionNumber") or []
+        primary_docs = recent.get("primaryDocument") or []
+
+        cutoff = (today or _dt.date.today()) - _dt.timedelta(days=_FORM4_LOOKBACK_DAYS)
+        rows: List[Tuple[_dt.date, str, str]] = []
+        n = min(len(forms), len(dates), len(accessions))
+        for i in range(n):
+            if str(forms[i]).strip() != "4":
+                continue
+            filed = _parse_date(dates[i])
+            if filed is None or filed < cutoff:
+                continue
+            accession = str(accessions[i] or "").strip()
+            if not accession:
+                continue
+            primary = str(primary_docs[i]).strip() if i < len(primary_docs) else ""
+            rows.append((filed, accession, primary))
+
+        rows.sort(key=lambda r: r[0], reverse=True)
+        return [(accession, primary) for _, accession, primary in rows[:_FORM4_MAX_FILINGS]]
+
+    def _fetch_form4_xml(self, cik: int, accession: str, primary_doc: str) -> str:
+        """Fetch the ``ownershipDocument`` XML text for one Form 4 filing.
+
+        Tries the filing's ``primaryDocument`` first when it names an ``.xml``
+        file (stripping any ``xsl.../`` rendering prefix, which points at an HTML
+        rendition rather than the raw XML). When the primary document is not the
+        XML — or its fetch 404s — falls back to scanning the filing's Archives
+        ``index.json`` for the first ownership ``.xml`` member.
+
+        Raises:
+            DataUnavailable / ProviderError: when no XML document can be located
+                or fetched for this filing.
+        """
+        nodash = accession.replace("-", "")
+        candidates: List[str] = []
+
+        primary = (primary_doc or "").strip()
+        if primary.lower().endswith(".xml"):
+            # e.g. "xslF345X05/wk-form4_1.xml" renders HTML; the raw XML lives at
+            # the bare document name in the same folder.
+            candidates.append(primary.rsplit("/", 1)[-1])
+
+        for doc in candidates:
+            url = _FILING_INDEX_URL.format(cik=cik, accession_nodash=nodash, primary_doc=doc)
+            try:
+                return self._get_text(url, what=f"Form 4 XML {accession}")
+            except DataUnavailable:
+                continue  # fall through to the index scan
+
+        # Fallback: scan the filing folder index for an .xml member.
+        index_url = _FILING_FOLDER_URL.format(cik=cik, accession_nodash=nodash) + "index.json"
+        index = self._get_json(index_url, what=f"filing index {accession}")
+        xml_name = self._find_xml_in_index(index)
+        if not xml_name:
+            raise DataUnavailable(
+                f"no ownership XML found in filing index for {accession}",
+                field="form4_xml",
+            )
+        url = _FILING_INDEX_URL.format(cik=cik, accession_nodash=nodash, primary_doc=xml_name)
+        return self._get_text(url, what=f"Form 4 XML {accession}")
+
+    @staticmethod
+    def _find_xml_in_index(index: Any) -> Optional[str]:
+        """Pick the ownership ``.xml`` document name from an Archives ``index.json``.
+
+        Prefers a name containing ``form4``, otherwise takes the first ``.xml``
+        entry that is not an ``xsl`` rendering artefact. Returns ``None`` when the
+        index carries no XML member.
+        """
+        if not isinstance(index, dict):
+            return None
+        items = ((index.get("directory") or {}).get("item")) or []
+        xml_names = [
+            str(item.get("name"))
+            for item in items
+            if isinstance(item, dict)
+            and str(item.get("name") or "").lower().endswith(".xml")
+            and not str(item.get("name") or "").lower().startswith("xsl")
+        ]
+        for name in xml_names:
+            if "form4" in name.lower():
+                return name
+        return xml_names[0] if xml_names else None
+
+    def _parse_form4_xml(self, xml_text: str) -> List[InsiderTransaction]:
+        """Parse a Form 4 ``ownershipDocument`` XML into insider transactions.
+
+        Reads the reporting owner's name and role (officer title, director or
+        10%-owner flag) and every ``nonDerivativeTransaction``:
+
+        * ``transactionDate/value`` → :attr:`InsiderTransaction.date`
+        * ``transactionCoding/transactionCode`` → ``transaction_type`` via
+          :data:`_FORM4_TRANSACTION_CODE_MAP` (unknown codes become
+          ``"other:<code>"`` — honestly labelled, never guessed).
+        * ``transactionShares/value`` → ``shares``
+        * ``shares * transactionPricePerShare/value`` → ``value`` (only when both
+          are present; otherwise ``None``, never fabricated).
+
+        Transactions missing a parseable date are skipped (a dateless transaction
+        cannot be placed on the insider timeline).
+
+        Raises:
+            ValueError: when ``xml_text`` is not well-formed XML.
+        """
+        try:
+            root = _ET.fromstring(xml_text)
+        except _ET.ParseError as exc:
+            raise ValueError(f"malformed Form 4 XML: {exc}") from exc
+
+        insider_name = self._xml_text(root, "reportingOwner/reportingOwnerId/rptOwnerName")
+        role = self._extract_owner_role(root)
+        if not insider_name:
+            insider_name = "Unknown insider"
+
+        out: List[InsiderTransaction] = []
+        for txn in root.iter("nonDerivativeTransaction"):
+            date = _parse_date(self._xml_text(txn, "transactionDate/value"))
+            if date is None:
+                continue
+            code = (self._xml_text(txn, "transactionCoding/transactionCode") or "").strip().upper()
+            transaction_type = _FORM4_TRANSACTION_CODE_MAP.get(
+                code, f"other:{code}" if code else "other:?"
+            )
+            shares = _coerce_float(
+                self._xml_text(txn, "transactionAmounts/transactionShares/value")
+            )
+            price = _coerce_float(
+                self._xml_text(txn, "transactionAmounts/transactionPricePerShare/value")
+            )
+            value = shares * price if (shares is not None and price is not None) else None
+            out.append(
+                InsiderTransaction(
+                    date=date,
+                    insider_name=insider_name,
+                    role=role,
+                    transaction_type=transaction_type,
+                    shares=shares,
+                    value=value,
+                )
+            )
+        return out
+
+    def _extract_owner_role(self, root: _ET.Element) -> Optional[str]:
+        """Derive the reporting owner's role from ``reportingOwnerRelationship``.
+
+        Preference order: an explicit ``officerTitle``, then ``Director``, then
+        ``10% owner``. Returns ``None`` when the filing declares none of these —
+        the role is left missing rather than invented.
+        """
+        rel_path = "reportingOwner/reportingOwnerRelationship"
+        title = self._xml_text(root, f"{rel_path}/officerTitle")
+        if title:
+            return title
+        if self._xml_flag(self._xml_text(root, f"{rel_path}/isDirector")):
+            return "Director"
+        if self._xml_flag(self._xml_text(root, f"{rel_path}/isTenPercentOwner")):
+            return "10% owner"
+        return None
+
+    @staticmethod
+    def _xml_text(elem: _ET.Element, path: str) -> Optional[str]:
+        """Return the stripped text at ``path`` under ``elem``, or ``None``."""
+        node = elem.find(path)
+        if node is None or node.text is None:
+            return None
+        text = node.text.strip()
+        return text or None
+
+    @staticmethod
+    def _xml_flag(value: Optional[str]) -> bool:
+        """Interpret a Form 4 boolean field, which may be ``"1"`` or ``"true"``."""
+        return (value or "").strip().lower() in {"1", "true"}
 
     # -- Company facts / fundamentals -----------------------------------------
 

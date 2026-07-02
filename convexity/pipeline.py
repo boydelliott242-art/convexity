@@ -30,6 +30,10 @@ The scan stages
    Every per-ticker fetch is wrapped in a ``try/except`` that catches
    :class:`~convexity.core.exceptions.ConvexityError` (and any stray exception) so a
    single bad ticker can **never** abort the scan: the error is counted and noted.
+   Each full payload is spilled losslessly to a per-scan temporary directory and
+   only a slim copy (heavy price/news/filings lists stripped) is retained for the
+   cohort, so peak memory is O(one security), not O(cohort) — see
+   :class:`_CohortStore`.
 4. **Context** — an :class:`~convexity.core.contracts.AnalysisContext` is built once
    from the successfully-fetched cohort: ``peer_stats`` grouped by sector and
    ``universe_stats`` across the whole cohort, so analyzers can score relative to
@@ -55,6 +59,9 @@ import-safe.
 from __future__ import annotations
 
 import datetime as _dt
+import os
+import shutil
+import tempfile
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Callable, Dict, List, Optional, Tuple
@@ -97,6 +104,116 @@ _STAGE_EXPLAIN = "explain"
 
 # A progress callback receives ``(stage, done, total, message)``.
 ProgressFn = Callable[[str, int, int, str], None]
+
+
+# The list-valued SecurityData fields that dominate its memory footprint (a
+# representative security is ~0.6 MB, almost all of it two years of PriceBar
+# models plus news/filings). These are stripped from the in-memory "slim" copy
+# each scan retains for its whole cohort and re-hydrated on demand per company.
+_HEAVY_COHORT_FIELDS: Tuple[str, ...] = (
+    "price_history",
+    "news",
+    "filings",
+    "insider_transactions",
+    "institutional_holdings",
+)
+
+
+class _CohortStore:
+    """Bounded-memory holder for a scan cohort's :class:`SecurityData`.
+
+    A full scan fetches thousands of securities but only ever *processes* one at
+    a time after the fetch stage (analysis is serial; explanation touches just the
+    top slice). Retaining every full object from fetch until ``scan()`` returns
+    costs O(cohort × ~0.6 MB) — gigabytes on a broad scan — for data that is idle
+    almost the whole time. This store keeps memory bounded:
+
+    * :meth:`put` spills the full object to a per-scan temporary directory (JSON
+      via pydantic, lossless round-trip) and returns a **slim** copy with the
+      heavy list fields (:data:`_HEAVY_COHORT_FIELDS`) emptied. The slim copy is
+      a few KB and carries everything the screening/context stages read: identity
+      fields, valuation, fundamentals and ``data_warnings``.
+    * :meth:`load` re-hydrates the full object for the one company being analysed
+      or explained, transferring any warnings appended to the slim copy after the
+      fetch (e.g. the unknown-cap note) so nothing recorded is lost.
+    * :meth:`close` deletes the spill directory.
+
+    Honesty note: the spill is a lossless serialisation of provider data — no
+    field is dropped, imputed or altered; scan results are byte-identical to the
+    all-in-memory behaviour. If the spill directory cannot be created or written
+    (read-only filesystem, disk full) the store degrades to keeping full objects
+    in memory — correctness over the memory bound.
+    """
+
+    def __init__(self) -> None:
+        self._paths: Dict[str, str] = {}
+        self._in_memory: Dict[str, SecurityData] = {}
+        self._dir: Optional[str] = None
+        try:
+            self._dir = tempfile.mkdtemp(prefix="convexity-scan-")
+        except OSError as exc:  # pragma: no cover - filesystem dependent
+            _log.warning(
+                "scan spill directory unavailable (%s); cohort stays in memory", exc
+            )
+
+    def put(self, data: SecurityData) -> SecurityData:
+        """Store the full ``data`` (disk-first) and return its slim in-memory copy."""
+        slim = data.model_copy(update={field: [] for field in _HEAVY_COHORT_FIELDS})
+        key = data.ticker
+        if self._dir is not None:
+            # File names are index-based (never ticker-derived) so an unusual
+            # symbol can not produce an invalid or colliding path.
+            path = os.path.join(self._dir, f"{len(self._paths)}.json")
+            try:
+                with open(path, "w", encoding="utf-8") as fh:
+                    fh.write(data.model_dump_json())
+                self._paths[key] = path
+                self._in_memory.pop(key, None)
+                return slim
+            except OSError as exc:  # pragma: no cover - filesystem dependent
+                _log.warning(
+                    "could not spill %s to disk (%s); keeping it in memory", key, exc
+                )
+        self._in_memory[key] = data
+        return slim
+
+    def load(self, slim: SecurityData) -> SecurityData:
+        """Re-hydrate the full :class:`SecurityData` behind a slim cohort copy.
+
+        The slim copy's ``data_warnings`` (a superset of the fetched warnings —
+        post-fetch stages append to it) replace the stored ones so every recorded
+        gap travels with the full object. Falls back to the slim copy itself if
+        the spilled file cannot be read back, degrading coverage rather than
+        crashing the scan.
+        """
+        key = slim.ticker
+        full = self._in_memory.get(key)
+        if full is None:
+            path = self._paths.get(key)
+            if path is None:
+                # Never stored (defensive): the slim copy is all we have.
+                return slim
+            try:
+                with open(path, encoding="utf-8") as fh:
+                    full = SecurityData.model_validate_json(fh.read())
+            except Exception as exc:  # pragma: no cover - filesystem dependent
+                _log.warning(
+                    "could not re-hydrate %s from spill (%s); analysing the slim "
+                    "copy (reduced coverage, honestly reflected in confidence)",
+                    key,
+                    exc,
+                )
+                return slim
+        full.data_warnings = list(slim.data_warnings)
+        return full
+
+    def close(self) -> None:
+        """Delete the spill directory and drop the in-memory fallbacks."""
+        if self._dir is not None:
+            shutil.rmtree(self._dir, ignore_errors=True)
+            self._dir = None
+        self._paths.clear()
+        self._in_memory.clear()
 
 
 class ScanPipeline:
@@ -210,7 +327,35 @@ class ScanPipeline:
         )
 
         # --- Stage 2: fetch SecurityData per ticker (bounded, isolated) -----
-        fetched, error_count, fetch_notes = self._fetch_all(universe, progress)
+        # Full per-ticker payloads are spilled to a per-scan temporary directory
+        # and re-hydrated one company at a time in the analyze/explain stages, so
+        # peak memory stays O(one security), not O(cohort) (see _CohortStore).
+        store = _CohortStore()
+        try:
+            return self._scan_with_store(
+                params, progress, store, universe, notes, weights, start
+            )
+        finally:
+            store.close()
+
+    def _scan_with_store(
+        self,
+        params: ScanParams,
+        progress: Optional[ProgressFn],
+        store: _CohortStore,
+        universe: List[str],
+        notes: List[str],
+        weights: Dict[ScoreCategory, float],
+        start: float,
+    ) -> ScanResult:
+        """Run scan stages 2–7 against an open :class:`_CohortStore`.
+
+        Split out of :meth:`scan` purely so the store's lifetime is a single
+        ``try/finally`` in the caller; behaviour and ordering are unchanged.
+        """
+        universe_size = len(universe)
+
+        fetched, error_count, fetch_notes = self._fetch_all(universe, progress, store)
         notes.extend(fetch_notes)
 
         # --- Stage 3: post-fetch screen enforcement (cap band + sector) -------
@@ -263,7 +408,7 @@ class ScanPipeline:
 
         # --- Stage 5: analyze every kept company with every analyzer --------
         analyzers = self._load_analyzers(notes)
-        analyses = self._analyze_all(kept, analyzers, weights, ctx, progress)
+        analyses = self._analyze_all(kept, analyzers, weights, ctx, progress, store)
         analyzed_count = len(analyses)
 
         # --- Stage 6: rank the universe -------------------------------------
@@ -274,7 +419,7 @@ class ScanPipeline:
         )
 
         # --- Stage 7: explain the top_n -------------------------------------
-        top = self._explain_top(ranked, kept, params, progress)
+        top = self._explain_top(ranked, kept, params, progress, store)
 
         elapsed = time.monotonic() - start
         notes.append(
@@ -354,20 +499,30 @@ class ScanPipeline:
         provider and falls back to the bundled seed list when the network or quotes
         are unavailable. Any unexpected failure degrades to an empty universe with a
         recorded note rather than aborting the scan.
+
+        The screen's exclusion counters are surfaced as scan notes: names the
+        screen could not *verify* (no quote, unknown cap, unknown liquidity) are
+        conservatively excluded upstream, and a large unverified count usually
+        means the quote provider was rate-limited — that shrinkage must appear in
+        the :class:`ScanResult`, not just in a log line.
         """
         from convexity.data import universe as universe_mod
 
+        screen_stats: Dict[str, int] = {}
         try:
             tickers = universe_mod.build_universe_or_seed(
                 params,
                 self._provider,
                 user_agent=self._settings.sec_user_agent,
                 timeout=self._settings.request_timeout,
+                stats=screen_stats,
             )
         except Exception as exc:  # pragma: no cover - defensive top-level guard
             _log.error("universe construction failed; scanning empty universe: %s", exc)
             notes.append(f"Universe construction failed ({exc}); no candidates screened.")
             return []
+
+        self._note_universe_screen_stats(screen_stats, notes)
 
         # De-duplicate defensively while preserving the deterministic order the
         # universe builder already established (so limiting stays reproducible).
@@ -384,6 +539,46 @@ class ScanPipeline:
             notes.append("Universe screen produced no eligible tickers.")
         return ordered
 
+    @staticmethod
+    def _note_universe_screen_stats(stats: Dict[str, int], notes: List[str]) -> None:
+        """Turn the universe screen's exclusion counters into honest scan notes.
+
+        Two situations must be visible in the :class:`ScanResult` rather than
+        buried at INFO level:
+
+        * the screen fell back to the bundled seed list (live screening was
+          unavailable or produced nothing); and
+        * candidates were excluded because their cap/liquidity could not be
+          *verified* (no quote, unknown market cap, unknown liquidity). Those
+          names were conservatively dropped — correct, but coverage-reducing —
+          and a large count typically indicates quote-provider rate limiting
+          silently shrinking the screened universe.
+        """
+        if not stats:
+            # The universe source did not report counters (e.g. a custom or
+            # test double); nothing verifiable to note.
+            return
+        if stats.get("used_seed_fallback"):
+            notes.append(
+                "Universe screen fell back to the bundled seed list (live "
+                "screening was unavailable or yielded no eligible tickers); "
+                "coverage is reduced, not complete."
+            )
+            return
+        no_quote = stats.get("no_quote", 0)
+        cap_unknown = stats.get("cap_unknown", 0)
+        liq_unknown = stats.get("liquidity_unknown", 0)
+        unverified = no_quote + cap_unknown + liq_unknown
+        if unverified:
+            notes.append(
+                f"Universe screen excluded {unverified} candidate(s) whose cap/"
+                f"liquidity could not be verified (no quote: {no_quote}, unknown "
+                f"market cap: {cap_unknown}, unknown liquidity: {liq_unknown}). "
+                "These are conservative exclusions, not market views; a large "
+                "count can indicate quote-provider rate limiting shrinking the "
+                "screened universe."
+            )
+
     # ------------------------------------------------------------------ #
     # Stage 2 helpers: fetch                                             #
     # ------------------------------------------------------------------ #
@@ -391,6 +586,7 @@ class ScanPipeline:
         self,
         tickers: List[str],
         progress: Optional[ProgressFn],
+        store: _CohortStore,
     ) -> Tuple[List[SecurityData], int, List[str]]:
         """Fetch :class:`SecurityData` for every ticker on a bounded thread pool.
 
@@ -398,13 +594,20 @@ class ScanPipeline:
         thin or uncovered micro-cap) — or any other exception — is caught, counted,
         and turned into a note, so one failing ticker can never abort the scan.
 
+        Memory: each fetched payload is handed to ``store`` as soon as its future
+        completes; only the slim copy (heavy list fields stripped) is retained for
+        the cohort, so a broad scan does not hold thousands of full price/news
+        payloads simultaneously.
+
         Args:
             tickers: The screened candidate symbols to fetch.
             progress: Optional progress callback for the ``fetch`` stage.
+            store: The per-scan cohort store the full payloads are spilled to.
 
         Returns:
-            A 3-tuple ``(fetched, error_count, notes)`` where ``fetched`` preserves
-            the input ordering of the tickers that succeeded.
+            A 3-tuple ``(fetched, error_count, notes)`` where ``fetched`` contains
+            the *slim* cohort copies, preserving the input ordering of the tickers
+            that succeeded.
         """
         total = len(tickers)
         results: Dict[str, SecurityData] = {}
@@ -427,7 +630,9 @@ class ScanPipeline:
                 # ``_fetch_one_safe`` never raises; it returns (data, error_message).
                 data, error_message = future.result()
                 if data is not None:
-                    results[ticker] = data
+                    # Spill the full payload immediately; retain only the slim
+                    # copy so cohort memory stays bounded during the scan.
+                    results[ticker] = store.put(data)
                     self._emit(
                         progress, _STAGE_FETCH, done, total, f"Fetched {ticker}."
                     )
@@ -727,6 +932,7 @@ class ScanPipeline:
         weights: Dict[ScoreCategory, float],
         ctx: AnalysisContext,
         progress: Optional[ProgressFn],
+        store: _CohortStore,
     ) -> List[CompanyAnalysis]:
         """Run every analyzer over every company and score each one.
 
@@ -734,12 +940,18 @@ class ScanPipeline:
         serially in deterministic cohort order. Each company is scored via the
         ranking engine's :meth:`score_company` once its sub-scores are gathered.
 
+        ``cohort`` carries the *slim* copies; the full payload (price history,
+        news, filings, insiders) is re-hydrated from ``store`` for exactly one
+        company at a time and released as soon as it is scored, keeping peak
+        memory independent of cohort size.
+
         Args:
-            cohort: The fetched, in-scope securities to analyse.
+            cohort: The fetched, in-scope securities (slim copies) to analyse.
             analyzers: The instantiated analyzers to apply to each security.
             weights: The category-weighting map handed to ``score_company``.
             ctx: The shared comparative context.
             progress: Optional progress callback for the ``analyze`` stage.
+            store: The per-scan cohort store holding the full payloads.
 
         Returns:
             One :class:`CompanyAnalysis` per company (narrative fields still empty —
@@ -749,7 +961,8 @@ class ScanPipeline:
         analyses: List[CompanyAnalysis] = []
         self._emit(progress, _STAGE_ANALYZE, 0, total, f"Analysing {total} company(ies)…")
 
-        for index, data in enumerate(cohort, start=1):
+        for index, slim in enumerate(cohort, start=1):
+            data = store.load(slim)
             subscores = self._run_analyzers(data, analyzers, ctx)
             analysis = self._ranking.score_company(data, subscores, weights)
             analyses.append(analysis)
@@ -829,20 +1042,23 @@ class ScanPipeline:
         cohort: List[SecurityData],
         params: ScanParams,
         progress: Optional[ProgressFn],
+        store: _CohortStore,
     ) -> List[CompanyAnalysis]:
         """Populate narrative for the top ``params.top_n`` ranked companies.
 
         The explainability engine restates already-attached evidence into prose. It
         is applied only to the top slice for efficiency (the full ranking is still
         returned by :meth:`scan`); each explained company is matched back to its
-        originating :class:`SecurityData` by ticker. A failure to explain one company
-        leaves its narrative empty rather than aborting the scan.
+        originating :class:`SecurityData` by ticker and re-hydrated from ``store``
+        one at a time (the cohort holds only slim copies). A failure to explain one
+        company leaves its narrative empty rather than aborting the scan.
 
         Args:
             ranked: The full best-first ranking.
-            cohort: The fetched securities (to recover each company's source data).
+            cohort: The fetched securities (slim copies, to recover source data).
             params: The scan parameters (``top_n`` controls how many are explained).
             progress: Optional progress callback for the ``explain`` stage.
+            store: The per-scan cohort store holding the full payloads.
 
         Returns:
             The explained top slice (the same :class:`CompanyAnalysis` instances that
@@ -853,11 +1069,12 @@ class ScanPipeline:
         total = len(top_slice)
         self._emit(progress, _STAGE_EXPLAIN, 0, total, f"Explaining top {total}…")
 
-        data_by_ticker: Dict[str, SecurityData] = {d.ticker: d for d in cohort}
+        slim_by_ticker: Dict[str, SecurityData] = {d.ticker: d for d in cohort}
         for index, analysis in enumerate(top_slice, start=1):
-            data = data_by_ticker.get(analysis.ticker)
-            if data is None:  # pragma: no cover - top always comes from the cohort
+            slim = slim_by_ticker.get(analysis.ticker)
+            if slim is None:  # pragma: no cover - top always comes from the cohort
                 continue
+            data = store.load(slim)
             try:
                 self._explain.explain(analysis, data)
             except Exception as exc:  # pragma: no cover - defensive per company

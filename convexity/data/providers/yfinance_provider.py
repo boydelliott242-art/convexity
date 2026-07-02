@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import datetime as _dt
 import math
+import threading
 import time
 from typing import Any, Dict, List, Optional, Sequence, Set
 
@@ -238,6 +239,17 @@ class YFinanceProvider(DataProvider):
     _MAX_QUARTERLY_PERIODS = 1
     _MAX_NEWS = 25
 
+    def __init__(self) -> None:
+        """Initialise the per-instance ``fast_info`` throttle state.
+
+        The screening path issues one lightweight ``fast_info`` HTTP request per
+        prefilter-clearing symbol; across a full listing that is thousands of
+        requests, so they are paced (see ``_fast_info_throttle``). The lock makes
+        the pacing correct even if a caller shares one provider across threads.
+        """
+        self._fast_info_lock = threading.Lock()
+        self._last_fast_info_ts = 0.0
+
     @property
     def name(self) -> str:
         """Stable identifier recorded in ``SecurityData.data_sources``."""
@@ -345,7 +357,13 @@ class YFinanceProvider(DataProvider):
     #    them (missing data lowers coverage; it is never fabricated).
     # 3. **Defensive + rate-limit friendly.** One bad chunk (network error,
     #    schema drift, empty payload) is logged and skipped — it can never raise
-    #    out of :meth:`get_quotes` — and a small sleep separates chunks.
+    #    out of :meth:`get_quotes` — a small sleep separates chunks, and every
+    #    per-symbol ``fast_info`` lookup is paced through ``_fast_info_throttle``
+    #    (~8 req/s) so the thousands of market-cap lookups a full-listing screen
+    #    performs do not trip Yahoo's rate limiting. Getting 429'd here is not
+    #    cosmetic: a rate-limited ``fast_info`` yields no market cap, the screen
+    #    then conservatively excludes the name, and the universe silently
+    #    shrinks — pacing prevents that failure mode at the source.
     #
     # The returned per-ticker dicts use exactly the keys
     # ``convexity.data.universe`` recognises: ``market_cap``,
@@ -362,6 +380,11 @@ class YFinanceProvider(DataProvider):
     #: per-symbol market-cap lookup. Kept far below the default screen floor
     #: ($200k/day) so the prefilter is strictly cheaper, never stricter.
     _MCAP_PREFILTER_MIN_DOLLAR_VOLUME = 25_000.0
+    #: Minimum spacing between per-symbol ``fast_info`` lookups (~8 req/s).
+    #: Without pacing, a 5,000-name screen fires thousands of back-to-back
+    #: requests, Yahoo answers 429, ``_fast_market_cap`` degrades to ``None``
+    #: and the universe screen silently drops those names as cap-unknown.
+    _FAST_INFO_MIN_INTERVAL_S = 0.12
 
     def get_quotes(self, tickers: Sequence[str]) -> Dict[str, Dict[str, float]]:
         """Return cheap screening quotes ``{ticker: {market_cap, avg_dollar_volume, price}}``.
@@ -523,14 +546,32 @@ class YFinanceProvider(DataProvider):
             quote["avg_dollar_volume"] = sum(dollar_volumes) / len(dollar_volumes)
         return quote
 
+    def _fast_info_throttle(self) -> None:
+        """Sleep just enough to keep ``fast_info`` lookups under ~8 requests/s.
+
+        The bulk ``yf.download`` path is already batched and paced, but market
+        caps require one HTTP request per surviving symbol; on a full-listing
+        screen that is the request volume that actually trips Yahoo's rate
+        limiting. Thread-safe so a shared provider instance still paces globally.
+        """
+        with self._fast_info_lock:
+            elapsed = time.monotonic() - self._last_fast_info_ts
+            wait = self._FAST_INFO_MIN_INTERVAL_S - elapsed
+            if wait > 0:
+                time.sleep(wait)
+            self._last_fast_info_ts = time.monotonic()
+
     def _fast_market_cap(self, yf: Any, yahoo_symbol: str, price: Optional[float]) -> Optional[float]:
         """Resolve one symbol's market cap via ``fast_info`` (the cheap quote endpoint).
 
         Prefers the endpoint's own market cap; falls back to ``last price ×
         shares outstanding`` when only shares are reported (using the bulk-download
         close when ``fast_info`` lacks a price). Returns ``None`` — never a guess —
-        when neither path yields a positive figure.
+        when neither path yields a positive figure. Each lookup is paced through
+        :meth:`_fast_info_throttle` so a screening pass stays under Yahoo's rate
+        limits instead of silently losing caps to 429 responses.
         """
+        self._fast_info_throttle()
         try:
             fast_info = getattr(yf.Ticker(yahoo_symbol), "fast_info", None)
         except Exception as exc:

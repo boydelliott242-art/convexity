@@ -48,6 +48,7 @@ from __future__ import annotations
 
 import csv
 import os
+import time
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -79,6 +80,14 @@ _DEFAULT_TIMEOUT = 20.0
 
 # How many symbols to request per batched-quote call when screening.
 _QUOTE_BATCH_SIZE = 100
+
+# Pause between successive batched-quote calls. The provider behind the screen is
+# duck-typed, so rate-limit friendliness cannot be delegated to it: a provider's
+# own inter-chunk throttle never engages when each ``get_quotes`` call carries a
+# single batch (batch size <= the provider's internal chunk size). Sleeping here
+# guarantees a full-listing screen (~50+ batches over ~5,000 names) is paced
+# regardless of which provider serves the quotes.
+_QUOTE_BATCH_PAUSE_S = 0.75
 
 
 # ---------------------------------------------------------------------------
@@ -680,6 +689,7 @@ def build_universe(
     user_agent: Optional[str] = None,
     timeout: float = _DEFAULT_TIMEOUT,
     batch_size: int = _QUOTE_BATCH_SIZE,
+    stats: Optional[Dict[str, int]] = None,
 ) -> List[str]:
     """Build the eligible small-/micro-cap universe by cap + liquidity screen.
 
@@ -707,6 +717,13 @@ def build_universe(
         user_agent: UA passed to :func:`fetch_listed_symbols` when enumerating.
         timeout: Per-request timeout used during enumeration.
         batch_size: How many symbols to request per batched-quote call.
+        stats: Optional dict the screen fills with its exclusion counters
+            (``candidates``, ``eligible``, ``quoted``, ``no_quote``,
+            ``cap_unknown``, ``cap_out_of_band``, ``liquidity_unknown``,
+            ``illiquid``) so a caller can surface — rather than bury in a log —
+            how many names were excluded because they could not be *verified*
+            (a spike there typically means the quote provider was rate-limited
+            and the screened universe silently shrank).
 
     Returns:
         A de-duplicated, order-preserving list of eligible tickers. Never raises
@@ -747,8 +764,13 @@ def build_universe(
     n_illiquid = 0
     n_liq_unknown = 0
 
-    # 3) Quote in batches; tolerate per-batch failures.
-    for batch in _chunk(candidate_list, batch_size):
+    # 3) Quote in batches; tolerate per-batch failures. A pause between batches
+    # keeps a full-listing screen under the quote source's rate limits (a
+    # rate-limited source returns capless quotes, which silently shrinks the
+    # universe — pacing prevents that in the first place).
+    for batch_index, batch in enumerate(_chunk(candidate_list, batch_size)):
+        if batch_index > 0 and _QUOTE_BATCH_PAUSE_S > 0:
+            time.sleep(_QUOTE_BATCH_PAUSE_S)
         quotes = _call_batched_quotes(price_provider, batch)
         for ticker in batch:
             quote = quotes.get(ticker.upper())
@@ -780,6 +802,29 @@ def build_universe(
 
     eligible = [t for t, _ in _dedupe_preserve_order([(t, "") for t in eligible])]
 
+    if stats is not None:
+        stats.update(
+            {
+                "candidates": len(candidate_list),
+                "eligible": len(eligible),
+                "quoted": n_quoted,
+                "no_quote": n_no_quote,
+                "cap_unknown": n_cap_unknown,
+                "cap_out_of_band": n_cap_out,
+                "liquidity_unknown": n_liq_unknown,
+                "illiquid": n_illiquid,
+            }
+        )
+
+    unverified = n_no_quote + n_cap_unknown + n_liq_unknown
+    if unverified and len(candidate_list) and unverified / len(candidate_list) >= 0.25:
+        _log.warning(
+            "universe screen: %d/%d candidates excluded because they could not be "
+            "verified (no quote / unknown cap / unknown liquidity) — this often "
+            "indicates quote-provider rate limiting shrinking the universe",
+            unverified,
+            len(candidate_list),
+        )
     _log.info(
         "universe screen: %d candidates -> %d eligible "
         "(quoted=%d, no_quote=%d, cap_unknown=%d, cap_out_of_band=%d, "
@@ -802,6 +847,7 @@ def build_universe_or_seed(
     *,
     user_agent: Optional[str] = None,
     timeout: float = _DEFAULT_TIMEOUT,
+    stats: Optional[Dict[str, int]] = None,
 ) -> List[str]:
     """Convenience wrapper: screen the live universe, else fall back to the seed.
 
@@ -810,19 +856,28 @@ def build_universe_or_seed(
     bundled curated seed tickers (optionally truncated to ``params.universe_limit``).
     This keeps the pipeline runnable with zero network/credentials while still
     preferring the real, screened universe whenever it is available.
+
+    When ``stats`` is supplied it is forwarded to :func:`build_universe` (see its
+    counter keys) and additionally gains ``used_seed_fallback`` (``1`` when the
+    seed list was used, ``0`` otherwise) so callers can report the run honestly.
     """
     if price_provider is not None:
         try:
             screened = build_universe(
-                params, price_provider, user_agent=user_agent, timeout=timeout
+                params, price_provider, user_agent=user_agent, timeout=timeout,
+                stats=stats,
             )
         except Exception as exc:  # pragma: no cover - defensive top-level guard
             _log.error("build_universe failed unexpectedly; using seed list: %s", exc)
             screened = []
         if screened:
+            if stats is not None:
+                stats["used_seed_fallback"] = 0
             return screened
         _log.warning("live universe screen produced no eligible tickers; using seed list")
 
+    if stats is not None:
+        stats["used_seed_fallback"] = 1
     seed = load_seed_tickers()
     limit = params.universe_limit
     if limit is not None and limit >= 0:

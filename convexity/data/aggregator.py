@@ -132,7 +132,10 @@ def _merge_valuation(
     blank field from ``incoming`` but never overwrite a value already established
     by a higher-priority source.
     """
-    merged = base.model_copy(deep=True)
+    # Shallow copy is sufficient (and purity-preserving): every field on a
+    # valuation snapshot is an immutable scalar, so mutating the copy via
+    # ``setattr`` can never write through to ``base``.
+    merged = base.model_copy()
     for field_name in ValuationSnapshot.model_fields:
         if getattr(merged, field_name) is None:
             value = getattr(incoming, field_name)
@@ -161,7 +164,9 @@ def _merge_fundamentals_period(
     base: FundamentalsPeriod, incoming: FundamentalsPeriod
 ) -> FundamentalsPeriod:
     """Merge two fundamentals records for the same period (base values win)."""
-    merged = base.model_copy(deep=True)
+    # Shallow copy: a fundamentals period holds only immutable scalars/dates, so
+    # per-field ``setattr`` on the copy cannot affect ``base``.
+    merged = base.model_copy()
     for field_name in FundamentalsPeriod.model_fields:
         if field_name in {"period_end", "period_label"}:
             continue
@@ -333,7 +338,13 @@ def merge_security_data(base: SecurityData, incoming: SecurityData) -> SecurityD
     This helper is pure and deterministic given its inputs, which keeps the
     aggregation auditable and reproducible.
     """
-    merged = base.model_copy(deep=True)
+    # A shallow copy keeps the merge pure without deep-copying ~0.6 MB of price
+    # bars/news per provider merge: every mutable field on the copy (valuation,
+    # fundamentals, price_history, news, filings, insiders, holdings, peers,
+    # data_sources, data_warnings) is *reassigned* below to a freshly-built
+    # object, and the element models themselves are never mutated — so ``base``
+    # and ``incoming`` remain untouched.
+    merged = base.model_copy()
 
     # Scalar identity — base wins; fill blanks from incoming (merge order encodes
     # priority, so we never overwrite a higher-priority non-empty value).
@@ -637,7 +648,18 @@ class CompositeProvider(DataProvider):
 
             contributed.append(pname)
             if merged is None:
-                merged = partial.model_copy(deep=True)
+                # Shallow copy with fresh list containers for the two fields the
+                # pipeline appends to downstream (warnings/provenance), so a
+                # provider that caches and re-serves its object can never be
+                # mutated through the merged record. A deep copy of the whole
+                # payload (~0.6 MB of bars/news per ticker, per fetch thread) is
+                # unnecessary: element models are never mutated downstream.
+                merged = partial.model_copy(
+                    update={
+                        "data_warnings": list(partial.data_warnings),
+                        "data_sources": list(partial.data_sources),
+                    }
+                )
             else:
                 merged = merge_security_data(merged, partial)
 
