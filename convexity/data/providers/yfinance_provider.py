@@ -23,14 +23,18 @@ The provider advertises the capabilities ``{"prices", "fundamentals",
 "valuation", "news", "universe-screen"}``. It does **not** enumerate a universe;
 ``get_universe`` is intentionally left raising
 :class:`~convexity.core.exceptions.NotSupported` (the screening universe is built
-by ``convexity/data/universe.py``).
+by ``convexity/data/universe.py``). It *does* serve the screening side of that
+universe build through :meth:`YFinanceProvider.get_quotes` — cheap, batched
+market-cap / average-dollar-volume quotes consumed by
+:func:`convexity.data.universe.build_universe`.
 """
 
 from __future__ import annotations
 
 import datetime as _dt
 import math
-from typing import Any, Dict, List, Optional, Set
+import time
+from typing import Any, Dict, List, Optional, Sequence, Set
 
 from convexity.core.contracts import DataProvider
 from convexity.core.exceptions import DataUnavailable, ProviderError
@@ -314,6 +318,261 @@ class YFinanceProvider(DataProvider):
             len(warnings),
         )
         return sec
+
+    # -- batched screening quotes (universe construction) --------------------
+    #
+    # Strategy (documented for the universe-screen consumer):
+    #
+    # 1. **Prices + volume in bulk.** ``yf.download(chunk, period="1mo",
+    #    group_by="ticker", threads=True, progress=False)`` fetches ~1 month of
+    #    daily bars for up to ``_QUOTE_CHUNK_SIZE`` (~200) tickers in a single
+    #    HTTP round-trip. From those bars we compute the *average dollar volume*
+    #    as ``mean(close × volume)`` over the rows actually returned, plus the
+    #    last close as ``price``. This is the cheap part: ~25 requests cover a
+    #    5,000-name listing.
+    # 2. **Market cap via a cheap, prefiltered path.** There is no batched
+    #    market-cap endpoint in yfinance, and calling ``fast_info`` for every one
+    #    of ~5,000 names is far too slow. So a per-symbol ``fast_info`` lookup
+    #    (Yahoo's lightweight quote endpoint) is made **only** for names that
+    #    first clear a conservative dollar-volume prefilter
+    #    (``_MCAP_PREFILTER_MIN_DOLLAR_VOLUME``, set well below the default
+    #    ``ScanParams.min_avg_dollar_volume`` screen floor of $200k/day so the
+    #    prefilter never excludes a name the real screen would have kept). For
+    #    each surviving name we take ``fast_info`` market cap directly, or
+    #    reconstruct it as ``last price × shares outstanding`` when only shares
+    #    are reported. Names failing the prefilter simply carry **no**
+    #    ``market_cap`` key — the universe screen then conservatively excludes
+    #    them (missing data lowers coverage; it is never fabricated).
+    # 3. **Defensive + rate-limit friendly.** One bad chunk (network error,
+    #    schema drift, empty payload) is logged and skipped — it can never raise
+    #    out of :meth:`get_quotes` — and a small sleep separates chunks.
+    #
+    # The returned per-ticker dicts use exactly the keys
+    # ``convexity.data.universe`` recognises: ``market_cap``,
+    # ``avg_dollar_volume`` and ``price``. A value that could not be determined
+    # is *omitted* rather than defaulted.
+
+    #: Max tickers per bulk ``yf.download`` call.
+    _QUOTE_CHUNK_SIZE = 200
+    #: History window used to average daily dollar volume.
+    _QUOTE_HISTORY_PERIOD = "1mo"
+    #: Pause between bulk download chunks (rate-limit friendliness).
+    _QUOTE_CHUNK_SLEEP_SECONDS = 0.75
+    #: Only names whose avg dollar volume clears this floor get the (slower)
+    #: per-symbol market-cap lookup. Kept far below the default screen floor
+    #: ($200k/day) so the prefilter is strictly cheaper, never stricter.
+    _MCAP_PREFILTER_MIN_DOLLAR_VOLUME = 25_000.0
+
+    def get_quotes(self, tickers: Sequence[str]) -> Dict[str, Dict[str, float]]:
+        """Return cheap screening quotes ``{ticker: {market_cap, avg_dollar_volume, price}}``.
+
+        Designed for :func:`convexity.data.universe.build_universe`: batched,
+        chunked (~200 symbols per ``yf.download`` call), with market cap resolved
+        through a per-symbol ``fast_info`` lookup only for names that pass a
+        cheap dollar-volume prefilter (see the strategy note above). Keys are the
+        requested tickers upper-cased; any figure that could not be positively
+        determined is omitted from that ticker's dict (never fabricated), and a
+        ticker with no usable data at all is absent from the result.
+
+        Never raises: a failed chunk or symbol is logged and skipped so one bad
+        batch cannot abort a full-universe screen.
+        """
+        symbols: List[str] = []
+        seen: Set[str] = set()
+        for raw in tickers:
+            sym = str(raw or "").strip().upper()
+            if sym and sym not in seen:
+                seen.add(sym)
+                symbols.append(sym)
+        if not symbols:
+            return {}
+
+        try:
+            yf = self._import_yfinance()
+        except ProviderError as exc:
+            _log.warning("get_quotes unavailable (yfinance missing): %s", exc)
+            return {}
+
+        out: Dict[str, Dict[str, float]] = {}
+        chunks = [
+            symbols[i : i + self._QUOTE_CHUNK_SIZE]
+            for i in range(0, len(symbols), self._QUOTE_CHUNK_SIZE)
+        ]
+        for idx, chunk in enumerate(chunks):
+            if idx > 0 and self._QUOTE_CHUNK_SLEEP_SECONDS > 0:
+                time.sleep(self._QUOTE_CHUNK_SLEEP_SECONDS)
+            try:
+                self._quote_chunk(yf, chunk, out)
+            except Exception as exc:  # defensive: one bad chunk never aborts the screen
+                _log.warning(
+                    "yfinance quote chunk %d/%d failed (%s: %s); skipping %d symbols",
+                    idx + 1,
+                    len(chunks),
+                    type(exc).__name__,
+                    exc,
+                    len(chunk),
+                )
+        return out
+
+    @staticmethod
+    def _to_yahoo_symbol(ticker: str) -> str:
+        """Convert a Nasdaq/CQS class-share separator ('.', '/', '$') to Yahoo's '-'.
+
+        The listing directories write e.g. ``BRK.B``; Yahoo Finance quotes it as
+        ``BRK-B``. Result keys are still the *original* tickers so the universe
+        screen can match them back.
+        """
+        return ticker.strip().upper().replace(".", "-").replace("/", "-").replace("$", "-")
+
+    def _quote_chunk(self, yf: Any, chunk: List[str], out: Dict[str, Dict[str, float]]) -> None:
+        """Fetch one chunk of screening quotes into ``out`` (best-effort, no raise)."""
+        yahoo_by_symbol = {sym: self._to_yahoo_symbol(sym) for sym in chunk}
+        try:
+            data = yf.download(
+                list(yahoo_by_symbol.values()),
+                period=self._QUOTE_HISTORY_PERIOD,
+                interval="1d",
+                group_by="ticker",
+                threads=True,
+                progress=False,
+                auto_adjust=False,
+            )
+        except Exception as exc:
+            _log.warning(
+                "yf.download failed for a %d-symbol chunk (%s: %s)",
+                len(chunk),
+                type(exc).__name__,
+                exc,
+            )
+            return
+        if data is None or getattr(data, "empty", True):
+            _log.warning("yf.download returned no data for a %d-symbol chunk", len(chunk))
+            return
+
+        single = len(yahoo_by_symbol) == 1
+        for sym, ysym in yahoo_by_symbol.items():
+            try:
+                frame = self._extract_symbol_frame(data, ysym, single=single)
+                quote = self._quote_from_frame(frame)
+            except Exception:  # pragma: no cover - defensive per symbol
+                quote = {}
+            if not quote:
+                continue
+
+            # Market cap only for names that clear the cheap liquidity prefilter;
+            # everything else keeps its liquidity figures but no cap (the screen
+            # then excludes it conservatively rather than us guessing a cap).
+            adv = quote.get("avg_dollar_volume")
+            if adv is not None and adv >= self._MCAP_PREFILTER_MIN_DOLLAR_VOLUME:
+                market_cap = self._fast_market_cap(yf, ysym, quote.get("price"))
+                if market_cap is not None:
+                    quote["market_cap"] = market_cap
+            out[sym] = quote
+
+    @staticmethod
+    def _extract_symbol_frame(data: Any, yahoo_symbol: str, *, single: bool) -> Any:
+        """Pull one ticker's OHLCV sub-frame out of a bulk ``yf.download`` result.
+
+        With ``group_by="ticker"`` a multi-symbol download has two-level columns
+        keyed by ticker; a single-symbol download comes back flat. Returns
+        ``None`` when the symbol is absent from the payload.
+        """
+        columns = getattr(data, "columns", None)
+        if columns is not None and getattr(columns, "nlevels", 1) > 1:
+            try:
+                if yahoo_symbol in set(columns.get_level_values(0)):
+                    return data[yahoo_symbol]
+            except Exception:  # pragma: no cover - defensive
+                return None
+            return None
+        return data if single else None
+
+    @staticmethod
+    def _quote_from_frame(frame: Any) -> Dict[str, float]:
+        """Compute ``price`` / ``avg_dollar_volume`` from one ticker's daily bars.
+
+        ``price`` is the last finite close; ``avg_dollar_volume`` is
+        ``mean(close × volume)`` over the rows where both are present. Missing
+        figures are omitted, never defaulted — an empty dict means the symbol had
+        no usable rows (e.g. delisted between the listing snapshot and now).
+        """
+        quote: Dict[str, float] = {}
+        if frame is None or getattr(frame, "empty", True):
+            return quote
+
+        columns = {str(c).lower(): c for c in getattr(frame, "columns", [])}
+        col_close = columns.get("close")
+        col_vol = columns.get("volume")
+        if col_close is None:
+            return quote
+
+        last_price: Optional[float] = None
+        dollar_volumes: List[float] = []
+        for _, row in frame.iterrows():
+            close = _to_float(row[col_close])
+            if close is None or close <= 0:
+                continue
+            last_price = close
+            volume = _to_float(row[col_vol]) if col_vol is not None else None
+            if volume is not None and volume >= 0:
+                dollar_volumes.append(close * volume)
+
+        if last_price is not None:
+            quote["price"] = last_price
+        if dollar_volumes:
+            quote["avg_dollar_volume"] = sum(dollar_volumes) / len(dollar_volumes)
+        return quote
+
+    def _fast_market_cap(self, yf: Any, yahoo_symbol: str, price: Optional[float]) -> Optional[float]:
+        """Resolve one symbol's market cap via ``fast_info`` (the cheap quote endpoint).
+
+        Prefers the endpoint's own market cap; falls back to ``last price ×
+        shares outstanding`` when only shares are reported (using the bulk-download
+        close when ``fast_info`` lacks a price). Returns ``None`` — never a guess —
+        when neither path yields a positive figure.
+        """
+        try:
+            fast_info = getattr(yf.Ticker(yahoo_symbol), "fast_info", None)
+        except Exception as exc:
+            _log.debug("fast_info unavailable for %s: %s", yahoo_symbol, exc)
+            return None
+        if fast_info is None:
+            return None
+
+        market_cap = self._fast_info_value(fast_info, ("market_cap", "marketCap"))
+        if market_cap is not None and market_cap > 0:
+            return market_cap
+
+        shares = self._fast_info_value(fast_info, ("shares", "sharesOutstanding", "shares_outstanding"))
+        if price is None or price <= 0:
+            price = self._fast_info_value(
+                fast_info, ("last_price", "lastPrice", "regular_market_previous_close")
+            )
+        if shares is not None and shares > 0 and price is not None and price > 0:
+            return shares * price
+        return None
+
+    @staticmethod
+    def _fast_info_value(fast_info: Any, keys: Sequence[str]) -> Optional[float]:
+        """Read the first finite numeric among ``keys`` from a ``fast_info`` object.
+
+        ``fast_info`` behaves like a lazy mapping in recent yfinance versions and
+        like an attribute bag in older ones; individual key accesses can raise
+        (each triggers a lazy fetch), so every access is isolated.
+        """
+        for key in keys:
+            value: Any = None
+            try:
+                value = fast_info[key]
+            except Exception:
+                try:
+                    value = getattr(fast_info, key)
+                except Exception:
+                    value = None
+            num = _to_float(value)
+            if num is not None:
+                return num
+        return None
 
     # -- yfinance import ---------------------------------------------------
 

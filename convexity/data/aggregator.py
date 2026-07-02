@@ -30,7 +30,7 @@ figure is correct or that the security will move in any direction.
 from __future__ import annotations
 
 import datetime as _dt
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from convexity.core.contracts import DataProvider
 from convexity.core.exceptions import (
@@ -559,6 +559,33 @@ class CompositeProvider(DataProvider):
                 f"(last error: {last_error})"
             )
         raise NotSupported("no registered provider supports universe enumeration")
+
+    def get_quotes(self, tickers: Sequence[str]) -> Dict[str, Dict[str, float]]:
+        """Delegate batched screening quotes to the first capable member provider.
+
+        The universe screen (:func:`convexity.data.universe.build_universe`) asks
+        its price provider for cheap batched quotes carrying ``market_cap`` /
+        ``avg_dollar_volume``. Members are tried in the composite's availability
+        order (unavailable providers were already dropped at construction); a
+        member without a callable ``get_quotes`` is skipped, and a member whose
+        call raises or returns nothing is logged and skipped so the next source
+        can try. Returns ``{}`` — never raises — when no member can quote the
+        batch, which the screen treats as "could not verify, exclude".
+        """
+        for provider in self._providers:
+            method = getattr(provider, "get_quotes", None)
+            if not callable(method):
+                continue
+            pname = self._safe_name(provider)
+            try:
+                result = method(tickers)
+            except Exception as exc:  # defensive: one bad member never aborts a screen
+                _log.warning("composite: %s.get_quotes failed: %s", pname, exc)
+                continue
+            if result:
+                return {str(k).upper(): v for k, v in dict(result).items()}
+            _log.debug("composite: %s.get_quotes returned no quotes for this batch", pname)
+        return {}
 
     def get_security_data(self, ticker: str) -> SecurityData:
         """Fetch ``ticker`` from every member provider and merge into one record.

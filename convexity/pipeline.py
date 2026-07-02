@@ -17,8 +17,14 @@ The scan stages
    the eligible US small-/micro-cap common stocks, honouring ``universe_limit``
    for fast iterations and screening by market cap + average dollar volume, with a
    bundled seed-list fallback so a scan always has something to analyse.
-2. **Sector exclusions** — any ``params.exclude_sectors`` are dropped *after*
-   per-ticker data is fetched (sector is a fetched field), recorded as a note.
+2. **Post-fetch screen enforcement** — the scan band is re-enforced on the
+   *fetched* data, which is authoritative and fresher than any pre-screen:
+   companies whose fetched ``market_cap`` falls outside
+   ``[params.min_market_cap, params.max_market_cap]`` are dropped and counted in
+   a note; companies whose market cap is *unknown* are kept with a recorded
+   ``data_warning`` (honesty over tidiness — we never silently drop on absent
+   data, and conviction already reflects the gap). Any ``params.exclude_sectors``
+   are likewise dropped here (sector is a fetched field), recorded as a note.
 3. **Fetch** — each surviving ticker's :class:`SecurityData` is assembled via the
    composite provider on a *bounded* :class:`~concurrent.futures.ThreadPoolExecutor`.
    Every per-ticker fetch is wrapped in a ``try/except`` that catches
@@ -207,8 +213,23 @@ class ScanPipeline:
         fetched, error_count, fetch_notes = self._fetch_all(universe, progress)
         notes.extend(fetch_notes)
 
-        # --- Stage 3: post-fetch sector exclusion (sector is a fetched field) -
-        kept, excluded_count = self._apply_sector_exclusions(fetched, params)
+        # --- Stage 3: post-fetch screen enforcement (cap band + sector) -------
+        # The fetched data is authoritative (fresher than any pre-fetch screen),
+        # so the scan band is re-enforced here on what was actually fetched.
+        in_band, band_excluded, unknown_cap = self._apply_cap_band(fetched, params)
+        if band_excluded:
+            notes.append(
+                f"{band_excluded} name(s) excluded post-fetch: outside cap band "
+                f"[${params.min_market_cap:,.0f}, ${params.max_market_cap:,.0f}]."
+            )
+        if unknown_cap:
+            notes.append(
+                f"{unknown_cap} name(s) kept with unknown market cap; cap-band "
+                "eligibility could not be verified (recorded as a data warning; "
+                "confidence reflects the gap rather than silently dropping)."
+            )
+
+        kept, excluded_count = self._apply_sector_exclusions(in_band, params)
         if excluded_count:
             notes.append(
                 f"Excluded {excluded_count} company(ies) by sector filter "
@@ -464,8 +485,58 @@ class ScanPipeline:
             return None, f"unexpected error: {exc}"
 
     # ------------------------------------------------------------------ #
-    # Stage 3 helpers: sector exclusion                                 #
+    # Stage 3 helpers: post-fetch screen enforcement                    #
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def _apply_cap_band(
+        fetched: List[SecurityData],
+        params: ScanParams,
+    ) -> Tuple[List[SecurityData], int, int]:
+        """Enforce the scan's market-cap band on the *fetched* (authoritative) data.
+
+        The pre-fetch universe screen works off quote-level estimates that can be
+        stale or absent; the fetched :class:`SecurityData` is the freshest figure we
+        have, so the band ``[params.min_market_cap, params.max_market_cap]`` is
+        re-enforced here:
+
+        * a company whose fetched ``market_cap`` lies outside the band is dropped
+          and counted;
+        * a company whose ``market_cap`` is ``None`` is **kept** — we never exclude
+          on absent data — but a ``data_warning`` is appended to its
+          :class:`SecurityData` so the gap is auditable and conviction (which
+          already accounts for data coverage) reflects it.
+
+        Args:
+            fetched: The successfully-fetched securities, in deterministic order.
+            params: The scan parameters carrying the cap band.
+
+        Returns:
+            A 3-tuple ``(kept, excluded_count, unknown_cap_count)`` where ``kept``
+            preserves the input ordering.
+        """
+        kept: List[SecurityData] = []
+        excluded = 0
+        unknown = 0
+        for data in fetched:
+            cap = data.market_cap
+            if cap is None:
+                unknown += 1
+                warning = (
+                    "Market cap unknown after fetch; cap-band eligibility "
+                    f"[${params.min_market_cap:,.0f}, ${params.max_market_cap:,.0f}] "
+                    "could not be verified. Kept in the cohort; confidence reflects "
+                    "this gap."
+                )
+                if warning not in data.data_warnings:
+                    data.data_warnings.append(warning)
+                kept.append(data)
+                continue
+            if cap < params.min_market_cap or cap > params.max_market_cap:
+                excluded += 1
+                continue
+            kept.append(data)
+        return kept, excluded, unknown
+
     @staticmethod
     def _apply_sector_exclusions(
         fetched: List[SecurityData],

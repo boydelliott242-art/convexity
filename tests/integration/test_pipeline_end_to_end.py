@@ -19,9 +19,17 @@ scan rather than exact numbers:
 
 from __future__ import annotations
 
+import datetime as _dt
 from typing import List
 
-from convexity.core.models import CompanyAnalysis, ScanParams, ScanResult
+from convexity.core.models import (
+    CompanyAnalysis,
+    ScanParams,
+    ScanResult,
+    SecurityData,
+    ValuationSnapshot,
+)
+from convexity.pipeline import ScanPipeline
 
 
 def test_scan_result_is_well_formed(pipeline, scan_params: ScanParams) -> None:
@@ -147,6 +155,87 @@ def test_thin_company_has_lower_conviction_than_strong(
     by_ticker = {c.ticker: c for c in result.all_ranked}
     assert by_ticker["THINCO"].conviction_confidence < \
         by_ticker["STRONGCO"].conviction_confidence
+
+
+def test_cap_band_enforced_on_fetched_data(pipeline) -> None:
+    """Names whose *fetched* market cap sits outside the band are dropped.
+
+    The fetched data is authoritative: with ``max_market_cap=400M`` the synthetic
+    STRONGCO ($420M) and MIXEDTWO ($1.1B) must be excluded post-fetch even though
+    the (patched) universe stage surfaced all six tickers, and the exclusion must
+    be recorded honestly in counts and notes.
+    """
+    result = pipeline.scan(ScanParams(top_n=2, max_market_cap=400_000_000))
+
+    ranked_tickers = {c.ticker for c in result.all_ranked}
+    assert "STRONGCO" not in ranked_tickers
+    assert "MIXEDTWO" not in ranked_tickers
+    assert ranked_tickers == {"WEAKCO", "MIXEDONE", "STEADYCO", "THINCO"}
+
+    # Counts stay truthful: 6 candidates surfaced, 4 survived the band.
+    assert result.universe_size == 6
+    assert result.screened_count == 4
+    assert result.analyzed_count == 4
+    assert result.error_count == 0
+
+    # The exclusion is recorded as an explicit, auditable note.
+    assert any(
+        "excluded post-fetch: outside cap band" in note for note in result.notes
+    ), result.notes
+
+
+def test_min_cap_floor_enforced_on_fetched_data(pipeline) -> None:
+    """The lower bound of the band is enforced too (drops the sub-$100M names)."""
+    result = pipeline.scan(ScanParams(top_n=2, min_market_cap=100_000_000))
+
+    ranked_tickers = {c.ticker for c in result.all_ranked}
+    # MIXEDONE ($95M) and THINCO ($55M) fall below the floor.
+    assert ranked_tickers == {"STRONGCO", "WEAKCO", "MIXEDTWO", "STEADYCO"}
+    assert result.screened_count == 4
+    assert any(
+        "excluded post-fetch: outside cap band" in note for note in result.notes
+    )
+
+
+def test_unknown_market_cap_is_kept_with_warning() -> None:
+    """A ``None`` market cap is never silently dropped — kept, with a warning.
+
+    Honesty over tidiness: absent data must not exclude a name; it is kept in the
+    cohort with an appended ``data_warning`` so conviction can reflect the gap.
+    """
+    unknown = SecurityData(
+        ticker="NOCAP",
+        name="NoCap Corp",
+        as_of=_dt.datetime(2026, 6, 30),
+        valuation=ValuationSnapshot(market_cap=None),
+    )
+    out_of_band = SecurityData(
+        ticker="BIGCO",
+        name="BigCo Inc",
+        as_of=_dt.datetime(2026, 6, 30),
+        valuation=ValuationSnapshot(market_cap=27_000_000_000.0),
+    )
+    in_band = SecurityData(
+        ticker="OKCO",
+        name="OkCo Ltd",
+        as_of=_dt.datetime(2026, 6, 30),
+        valuation=ValuationSnapshot(market_cap=300_000_000.0),
+    )
+
+    params = ScanParams(min_market_cap=50_000_000, max_market_cap=2_000_000_000)
+    kept, excluded, unknown_count = ScanPipeline._apply_cap_band(
+        [unknown, out_of_band, in_band], params
+    )
+
+    assert [d.ticker for d in kept] == ["NOCAP", "OKCO"]
+    assert excluded == 1
+    assert unknown_count == 1
+    assert any("Market cap unknown after fetch" in w for w in unknown.data_warnings)
+    # Re-applying must not duplicate the warning.
+    ScanPipeline._apply_cap_band([unknown], params)
+    assert (
+        sum("Market cap unknown after fetch" in w for w in unknown.data_warnings) == 1
+    )
 
 
 def test_universe_limit_shrinks_the_scan(pipeline) -> None:
