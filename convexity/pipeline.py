@@ -543,9 +543,13 @@ class ScanPipeline:
     def _note_universe_screen_stats(stats: Dict[str, int], notes: List[str]) -> None:
         """Turn the universe screen's exclusion counters into honest scan notes.
 
-        Two situations must be visible in the :class:`ScanResult` rather than
+        Three situations must be visible in the :class:`ScanResult` rather than
         buried at INFO level:
 
+        * listed investment vehicles (SPAC/blank-check shells, closed-end funds,
+          CEF fund-family listings) were excluded by name during enumeration —
+          deliberate, since the platform researches operating companies, but the
+          count belongs in the result, never silent;
         * the screen fell back to the bundled seed list (live screening was
           unavailable or produced nothing); and
         * candidates were excluded because their cap/liquidity could not be
@@ -558,6 +562,18 @@ class ScanPipeline:
             # The universe source did not report counters (e.g. a custom or
             # test double); nothing verifiable to note.
             return
+        n_spac = stats.get("excluded_spac", 0)
+        n_cef = stats.get("excluded_closed_end_fund", 0)
+        n_family = stats.get("excluded_fund_family", 0)
+        n_vehicles = n_spac + n_cef + n_family
+        if n_vehicles:
+            notes.append(
+                f"Universe enumeration excluded {n_vehicles} listed investment "
+                f"vehicle(s) by name (SPAC/blank-check: {n_spac}, closed-end "
+                f"fund pattern: {n_cef}, fund-family prefix: {n_family}). These "
+                "are not operating companies, so the evidence categories the "
+                "scoring relies on do not apply to them."
+            )
         if stats.get("used_seed_fallback"):
             notes.append(
                 "Universe screen fell back to the bundled seed list (live "

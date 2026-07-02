@@ -10,9 +10,11 @@ without selection bias. Building that universe is a two-stage funnel:
    Nasdaq Trader symbol directories (``nasdaqlisted.txt`` and ``otherlisted.txt``,
    which together cover every Nasdaq-, NYSE-, NYSE American- and Cboe-listed
    security) and keeps only ordinary common shares. ETFs, closed-end and
-   open-end funds, warrants, units, rights, preferreds, notes and exchange *test*
-   issues are filtered out using the directories' own flag columns plus a small
-   set of suffix heuristics. If Nasdaq Trader is unreachable the function falls
+   open-end funds, SPAC/blank-check shells, warrants, units, rights, preferreds,
+   notes and exchange *test* issues are filtered out using the directories' own
+   flag columns plus name/suffix heuristics (SPACs and closed-end funds are
+   matched by name pattern and fund-family prefix, and every such exclusion is
+   counted so it can be reported). If Nasdaq Trader is unreachable the function falls
    back to the SEC's ``company_tickers.json`` (every SEC-registered filer), and if
    *that* is unreachable too it falls back to the bundled curated seed list
    (:func:`load_seed_universe`) so the tool still runs offline.
@@ -48,6 +50,7 @@ from __future__ import annotations
 
 import csv
 import os
+import re
 import time
 from collections.abc import Sequence
 from typing import Any, Dict, List, Optional, Set, Tuple
@@ -139,7 +142,8 @@ _TRUST_RESCUE_TOKENS: Tuple[str, ...] = (
     "mortgage trust",
     "capital trust",
     "growth trust",
-    "income trust",  # operating REITs; CEFs are caught by the structured ETF flag
+    "income trust",  # operating REITs; CEF "…Income Trust" names are caught by
+    # the investment-vehicle patterns below *before* this rescue can apply
     "water trust",
     "storage trust",
     "hotel trust",
@@ -158,19 +162,197 @@ _NON_COMMON_TICKER_SUFFIXES: Tuple[str, ...] = (
     "WI",  # when-issued
 )
 
+# ---------------------------------------------------------------------------
+# Investment-vehicle exclusion (SPACs / blank-check shells & closed-end funds)
+# ---------------------------------------------------------------------------
+# The platform researches OPERATING companies. SPACs are blank-check shells with
+# no revenue, margins or insiders, and closed-end funds (CEFs) are pooled
+# investment vehicles — for both, downstream scoring would lean on a thin subset
+# of evidence categories and mislead. These name patterns catch the vehicles the
+# structured ETF flags miss (CEFs and SPACs are *not* flagged as ETFs in the
+# Nasdaq directories, and the SEC fallback has no flags at all). Every exclusion
+# they cause is counted (see ``_NAME_EXCLUSION_STAT_KEYS``) so scan notes can
+# report it rather than shrinking the universe silently.
 
-def _looks_like_common_stock(ticker: str, name: str) -> bool:
-    """Heuristically decide whether ``(ticker, name)`` is an ordinary common share.
+# SPAC / blank-check name patterns. Matched word-boundary aware and
+# case-insensitive: "acquisition corp" hits "Breeze Acquisition Corp. II" but
+# not, say, an operating name where the words merely appear inside longer words.
+_SPAC_NAME_PATTERNS: Tuple[str, ...] = (
+    "acquisition corp",
+    "acquisition corporation",
+    "acquisition company",
+    "acquisition co",
+    "blank check",
+    "spac",
+)
+
+# Closed-end-fund name patterns. These phrases are fund-strategy vocabulary
+# ("Municipal Income", "Floating Rate", "Total Return Fund", …) that essentially
+# never appears in an operating company's registered name. Matched word-boundary
+# aware and case-insensitive.
+_CEF_NAME_PATTERNS: Tuple[str, ...] = (
+    "closed-end",
+    "closed end fund",
+    "municipal income",
+    "tax-advantaged",
+    "tax advantaged",
+    "dividend and income",
+    "total return fund",
+    "floating rate",
+    "floating-rate",
+    "senior loan",
+    "high income",
+    "multi-sector income",
+    "managed income",
+    "premium income",
+    "global income",
+    "strategic income",
+)
+
+# Curated CEF name prefixes where the prefix *is* the fund's identity ("ASA
+# Gold & Precious Metals", "Tri-Continental Corporation", "Liberty All-Star
+# Equity Fund", …). A prefix match alone is decisive: no US-listed operating
+# company shares these prefixes. Matched as a lowercased, whitespace-stripped
+# name PREFIX (never as a substring, so e.g. "Artisan Partners Asset
+# Management" — an operating manager — is untouched).
+_CEF_FUND_NAME_PREFIXES: Tuple[str, ...] = (
+    "adams diversified",
+    "adams natural resources",
+    "asa gold",
+    "central securities",
+    "general american investors",
+    "liberty all-star",
+    "source capital",
+    "tortoise",
+    "tri-continental",
+)
+
+# CEF *sponsor* prefixes. These are NOT decisive on their own, because several
+# sponsors are themselves listed operating companies ("BlackRock, Inc.",
+# "Invesco Ltd", "Virtus Investment Partners", "Cohen & Steers, Inc.") and some
+# prefixes collide with unrelated operating names ("Franklin Electric Co.",
+# "Franklin Covey Company", "Franklin BSP Realty Trust" — an operating REIT).
+# A sponsor prefix therefore only marks a fund when the *rest* of the name also
+# reads like a fund: it carries fund vocabulary (``_CEF_SPONSOR_VOCAB_RE``,
+# e.g. "BlackRock Municipal Income Trust") or the word "Trust" without any of
+# the operating-REIT rescue phrases (e.g. "Gabelli Utility Trust" is a fund,
+# while "Franklin BSP Realty Trust" is rescued by "realty trust").
+_CEF_SPONSOR_PREFIXES: Tuple[str, ...] = (
+    "abrdn",
+    "aberdeen",
+    "blackrock",
+    "calamos",
+    "cohen & steers",
+    "eaton vance",
+    "franklin",
+    "gabelli",
+    "invesco",
+    "john hancock",
+    "neuberger berman",
+    "nuveen",
+    "pimco",
+    "putnam",
+    "royce",
+    "templeton",
+    "virtus",
+    "western asset",
+)
+
+# Fund vocabulary that, together with a sponsor prefix, confirms a fund listing
+# ("abrdn Healthcare *Investors*", "Putnam Managed Municipal *Income* Trust",
+# "Invesco Bond *Fund*") as opposed to the sponsor's own operating stock or an
+# unrelated operating namesake, which carry none of these words.
+_CEF_SPONSOR_VOCAB_RE = re.compile(
+    r"\b(?:funds?|income|investors|municipal|dividend|opportunit(?:y|ies))\b"
+)
+_TRUST_WORD_RE = re.compile(r"\btrust\b")
+
+# Compiled word-boundary matchers for the pattern lists above (names are
+# lowercased before matching, so the patterns are written lowercase).
+_SPAC_NAME_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(p) for p in _SPAC_NAME_PATTERNS) + r")\b"
+)
+_CEF_NAME_RE = re.compile(
+    r"\b(?:" + "|".join(re.escape(p) for p in _CEF_NAME_PATTERNS) + r")\b"
+)
+
+# Exclusion reasons that must surface in the conservative-exclusion accounting
+# (reason key -> stats-counter key reported through ``build_universe``'s
+# ``stats`` dict and turned into scan notes by the pipeline).
+_NAME_EXCLUSION_STAT_KEYS: Dict[str, str] = {
+    "spac": "excluded_spac",
+    "closed_end_fund": "excluded_closed_end_fund",
+    "fund_family": "excluded_fund_family",
+}
+
+
+def _investment_vehicle_reason(name: str) -> Optional[str]:
+    """Classify ``name`` as an investment vehicle, or return ``None``.
+
+    Checks, in order: SPAC/blank-check patterns, the curated CEF fund-name and
+    fund-family sponsor prefixes (the strongest signals, so exclusions are
+    attributed to them first), then the closed-end-fund strategy patterns. A
+    sponsor prefix alone is never enough — the rest of the name must also read
+    like a fund — because several sponsors are themselves listed operating
+    companies (BlackRock, Invesco, Virtus, Cohen & Steers) and "Franklin"
+    collides with unrelated operating names (Franklin Electric, Franklin
+    Covey, Franklin BSP Realty Trust). This is a NAME-layer check only — it
+    never touches fundamentals, so pre-revenue biotechs and other thin-data
+    operating companies are unaffected.
+
+    Returns:
+        ``"spac"``, ``"fund_family"`` or ``"closed_end_fund"`` when the name
+        marks a vehicle; ``None`` when it looks like an operating company.
+    """
+    lower_name = name.strip().lower()
+    if lower_name.startswith("the "):
+        lower_name = lower_name[4:]
+    if _SPAC_NAME_RE.search(lower_name):
+        return "spac"
+    for prefix in _CEF_FUND_NAME_PREFIXES:
+        if lower_name.startswith(prefix):
+            return "fund_family"
+    for prefix in _CEF_SPONSOR_PREFIXES:
+        if not lower_name.startswith(prefix):
+            continue
+        if _CEF_SPONSOR_VOCAB_RE.search(lower_name):
+            return "fund_family"
+        # "Trust" after a sponsor prefix marks a fund unless the name uses an
+        # operating-REIT trust phrase ("realty trust", "property trust", …).
+        padded_name = f" {lower_name} "
+        if _TRUST_WORD_RE.search(lower_name) and not any(
+            tok in padded_name for tok in _TRUST_RESCUE_TOKENS
+        ):
+            return "fund_family"
+        # Sponsor-prefixed but reads like an operating company (e.g.
+        # "BlackRock, Inc." itself): keep checking the strategy patterns only.
+        break
+    if _CEF_NAME_RE.search(lower_name):
+        return "closed_end_fund"
+    return None
+
+
+def _common_stock_exclusion_reason(ticker: str, name: str) -> Optional[str]:
+    """Explain why ``(ticker, name)`` is not an ordinary common share, if it isn't.
 
     This is the name/suffix layer of the filter; the structured ETF/test flags in
     the Nasdaq directories are applied separately in :func:`_parse_nasdaq_listed`
-    and :func:`_parse_other_listed`. The goal is to drop ETFs/funds, warrants,
-    units, rights, preferreds and notes while retaining operating companies
-    (including REITs). It is intentionally conservative: when in doubt it keeps
-    the symbol, since the later cap/liquidity screen will still gate inclusion.
+    and :func:`_parse_other_listed`. The goal is to drop ETFs/funds, SPACs,
+    warrants, units, rights, preferreds and notes while retaining operating
+    companies (including REITs and operating LPs). It is intentionally
+    conservative: when in doubt it keeps the symbol, since the later
+    cap/liquidity screen will still gate inclusion.
+
+    Returns:
+        ``None`` when the pair looks like an operating-company common share,
+        otherwise a short reason key: ``"missing"`` (blank ticker/name),
+        ``"ticker_suffix"`` (warrant/unit/right/preferred line), ``"spac"``,
+        ``"closed_end_fund"``, ``"fund_family"`` (investment vehicles — see
+        :func:`_investment_vehicle_reason`) or ``"non_common_name"`` (generic
+        non-common-stock token in the name).
     """
     if not ticker or not name:
-        return False
+        return "missing"
 
     upper_ticker = ticker.strip().upper()
     lower_name = f" {name.strip().lower()} "
@@ -182,7 +364,7 @@ def _looks_like_common_stock(ticker: str, name: str) -> bool:
     if "." in sep_ticker:
         base, _, suffix = sep_ticker.rpartition(".")
         if suffix in _NON_COMMON_TICKER_SUFFIXES and base:
-            return False
+            return "ticker_suffix"
 
     # Bare-suffix warrants/units/rights with no separator (e.g. "ABCDW", "ABCDU").
     # Only treat a trailing W/U/R/RT as a derivative when the ticker is long
@@ -191,10 +373,19 @@ def _looks_like_common_stock(ticker: str, name: str) -> bool:
     if len(upper_ticker) >= 5:
         for suffix in ("WS", "RT", "WI"):
             if upper_ticker.endswith(suffix) and len(upper_ticker) > len(suffix):
-                return False
+                return "ticker_suffix"
         if upper_ticker.endswith(("W", "U", "R")):
             # e.g. a 5+ char symbol ending in W is almost always a warrant.
-            return False
+            return "ticker_suffix"
+
+    # Investment vehicles (SPAC shells, closed-end funds, CEF fund families).
+    # Checked *before* the generic tokens so (a) the exclusion is attributed —
+    # and therefore counted — precisely, and (b) CEFs whose names contain
+    # "Income Trust" cannot slip through the REIT trust rescue below (e.g.
+    # "Putnam Managed Municipal Income Trust" is a fund, not a REIT).
+    vehicle_reason = _investment_vehicle_reason(name)
+    if vehicle_reason is not None:
+        return vehicle_reason
 
     # Name-based exclusion, with a rescue for operating REITs that use "Trust".
     is_rescued_trust = any(tok in lower_name for tok in _TRUST_RESCUE_TOKENS)
@@ -202,9 +393,19 @@ def _looks_like_common_stock(ticker: str, name: str) -> bool:
         if token in lower_name:
             if token == " trust " and is_rescued_trust:
                 continue
-            return False
+            return "non_common_name"
 
-    return True
+    return None
+
+
+def _looks_like_common_stock(ticker: str, name: str) -> bool:
+    """Heuristically decide whether ``(ticker, name)`` is an ordinary common share.
+
+    Thin boolean wrapper over :func:`_common_stock_exclusion_reason`, which holds
+    the actual layered heuristics (ticker suffixes, investment-vehicle patterns,
+    generic non-common-stock name tokens with the REIT trust rescue).
+    """
+    return _common_stock_exclusion_reason(ticker, name) is None
 
 
 # ---------------------------------------------------------------------------
@@ -289,12 +490,30 @@ def _column_index(header: Sequence[str], name: str) -> Optional[int]:
     return None
 
 
-def _parse_nasdaq_listed(text: str) -> List[Tuple[str, str]]:
+def _count_name_exclusion(counters: Optional[Dict[str, int]], reason: str) -> None:
+    """Bump the stats counter for a countable name-layer exclusion ``reason``.
+
+    Only investment-vehicle reasons (SPAC / closed-end fund / fund family) are
+    counted — they are the conservative exclusions scan notes must surface. A
+    ``None`` ``counters`` (callers that did not ask for accounting) is a no-op.
+    """
+    if counters is None:
+        return
+    key = _NAME_EXCLUSION_STAT_KEYS.get(reason)
+    if key is not None:
+        counters[key] = counters.get(key, 0) + 1
+
+
+def _parse_nasdaq_listed(
+    text: str, counters: Optional[Dict[str, int]] = None
+) -> List[Tuple[str, str]]:
     """Parse ``nasdaqlisted.txt`` -> list of ``(ticker, name)`` common stocks.
 
     Columns: ``Symbol|Security Name|Market Category|Test Issue|Financial Status|
     Round Lot Size|ETF|NextShares``. We drop test issues (``Test Issue == 'Y'``)
     and ETFs (``ETF == 'Y'``), then apply the name/suffix common-stock heuristic.
+    ``counters`` (optional) receives the investment-vehicle exclusion counts so
+    those conservative exclusions can be reported, never silent.
     """
     header, rows = _parse_pipe_table(text)
     i_sym = _column_index(header, "Symbol")
@@ -315,17 +534,24 @@ def _parse_nasdaq_listed(text: str) -> List[Tuple[str, str]]:
             continue
         if i_etf is not None and len(parts) > i_etf and parts[i_etf].strip().upper() == "Y":
             continue
-        if _looks_like_common_stock(ticker, name):
+        reason = _common_stock_exclusion_reason(ticker, name)
+        if reason is None:
             out.append((ticker, name))
+        else:
+            _count_name_exclusion(counters, reason)
     return out
 
 
-def _parse_other_listed(text: str) -> List[Tuple[str, str]]:
+def _parse_other_listed(
+    text: str, counters: Optional[Dict[str, int]] = None
+) -> List[Tuple[str, str]]:
     """Parse ``otherlisted.txt`` -> list of ``(ticker, name)`` common stocks.
 
     Columns: ``ACT Symbol|Security Name|Exchange|CQS Symbol|ETF|Round Lot Size|
     Test Issue|NASDAQ Symbol``. We prefer the ``ACT Symbol`` (the canonical CQS
     ticker), drop test issues and ETFs, then apply the common-stock heuristic.
+    ``counters`` (optional) receives the investment-vehicle exclusion counts so
+    those conservative exclusions can be reported, never silent.
     """
     header, rows = _parse_pipe_table(text)
     i_sym = _column_index(header, "ACT Symbol")
@@ -348,16 +574,23 @@ def _parse_other_listed(text: str) -> List[Tuple[str, str]]:
             continue
         if i_etf is not None and len(parts) > i_etf and parts[i_etf].strip().upper() == "Y":
             continue
-        if _looks_like_common_stock(ticker, name):
+        reason = _common_stock_exclusion_reason(ticker, name)
+        if reason is None:
             out.append((ticker, name))
+        else:
+            _count_name_exclusion(counters, reason)
     return out
 
 
-def _parse_sec_company_tickers(text: str) -> List[Tuple[str, str]]:
+def _parse_sec_company_tickers(
+    text: str, counters: Optional[Dict[str, int]] = None
+) -> List[Tuple[str, str]]:
     """Parse SEC ``company_tickers.json`` -> ``(ticker, name)`` common stocks.
 
     The SEC file has no ETF/derivative flags, so only the name/suffix heuristic
     can be applied. It is a coverage fallback, not the primary source.
+    ``counters`` (optional) receives the investment-vehicle exclusion counts so
+    those conservative exclusions can be reported, never silent.
     """
     import json
 
@@ -375,8 +608,13 @@ def _parse_sec_company_tickers(text: str) -> List[Tuple[str, str]]:
             continue
         ticker = str(entry.get("ticker", "")).strip()
         name = str(entry.get("title", "")).strip()
-        if ticker and name and _looks_like_common_stock(ticker, name):
+        if not ticker or not name:
+            continue
+        reason = _common_stock_exclusion_reason(ticker, name)
+        if reason is None:
             out.append((ticker, name))
+        else:
+            _count_name_exclusion(counters, reason)
     return out
 
 
@@ -403,6 +641,7 @@ def fetch_listed_symbols(
     user_agent: Optional[str] = None,
     timeout: float = _DEFAULT_TIMEOUT,
     include_names: bool = False,
+    stats: Optional[Dict[str, int]] = None,
 ) -> List[Any]:
     """Return every US-listed *common stock* symbol, filtering out non-equities.
 
@@ -421,6 +660,11 @@ def fetch_listed_symbols(
         timeout: Per-request timeout in seconds.
         include_names: When ``True`` return ``(ticker, name)`` tuples; otherwise
             return a flat, sorted list of ticker strings.
+        stats: Optional dict the enumeration fills with its investment-vehicle
+            exclusion counters (``excluded_spac``, ``excluded_closed_end_fund``,
+            ``excluded_fund_family``) so callers can surface — rather than bury
+            in a log — how many listed vehicles were conservatively dropped by
+            the name-layer filter.
 
     Returns:
         A de-duplicated list of common-stock tickers (or ``(ticker, name)`` pairs
@@ -429,14 +673,18 @@ def fetch_listed_symbols(
     """
     ua = user_agent or _DEFAULT_USER_AGENT
     pairs: List[Tuple[str, str]] = []
+    if stats is not None:
+        # Counters always present (even at zero) so callers can report honestly.
+        for key in _NAME_EXCLUSION_STAT_KEYS.values():
+            stats.setdefault(key, 0)
 
     # --- Primary: Nasdaq Trader directories ----------------------------------
     nasdaq_text = _http_get_text(_NASDAQ_LISTED_URL, user_agent=ua, timeout=timeout)
     other_text = _http_get_text(_OTHER_LISTED_URL, user_agent=ua, timeout=timeout)
     if nasdaq_text:
-        pairs.extend(_parse_nasdaq_listed(nasdaq_text))
+        pairs.extend(_parse_nasdaq_listed(nasdaq_text, counters=stats))
     if other_text:
-        pairs.extend(_parse_other_listed(other_text))
+        pairs.extend(_parse_other_listed(other_text, counters=stats))
 
     if pairs:
         _log.info("fetched %d common stocks from Nasdaq Trader directories", len(pairs))
@@ -445,7 +693,7 @@ def fetch_listed_symbols(
         _log.warning("Nasdaq Trader unavailable; falling back to SEC company_tickers.json")
         sec_text = _http_get_text(_SEC_TICKERS_URL, user_agent=ua, timeout=timeout)
         if sec_text:
-            pairs.extend(_parse_sec_company_tickers(sec_text))
+            pairs.extend(_parse_sec_company_tickers(sec_text, counters=stats))
             _log.info("fetched %d common stocks from SEC company_tickers.json", len(pairs))
 
     if not pairs:
@@ -723,7 +971,11 @@ def build_universe(
             ``illiquid``) so a caller can surface — rather than bury in a log —
             how many names were excluded because they could not be *verified*
             (a spike there typically means the quote provider was rate-limited
-            and the screened universe silently shrank).
+            and the screened universe silently shrank). When this function also
+            performs the enumeration (``candidates`` not supplied) the dict
+            additionally gains the name-layer investment-vehicle counters from
+            :func:`fetch_listed_symbols` (``excluded_spac``,
+            ``excluded_closed_end_fund``, ``excluded_fund_family``).
 
     Returns:
         A de-duplicated, order-preserving list of eligible tickers. Never raises
@@ -731,7 +983,9 @@ def build_universe(
     """
     # 1) Candidate symbols (full enumeration unless caller supplied a list).
     if candidates is None:
-        candidate_list = fetch_listed_symbols(user_agent=user_agent, timeout=timeout)
+        candidate_list = fetch_listed_symbols(
+            user_agent=user_agent, timeout=timeout, stats=stats
+        )
     else:
         candidate_list = _dedupe_preserve_order([(c, "") for c in candidates])
         candidate_list = [t for t, _ in candidate_list]  # type: ignore[misc]
