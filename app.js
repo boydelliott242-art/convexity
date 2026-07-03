@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { scoreColor, convictionDots, heatStrip, radarChart, compositeBars, convictionScatter, gauge } from "./charts.js";
-import { isLive, loadSample, loadLatest, runScan, fetchCompany } from "./api.js";
+import { isLive, loadSample, loadPublished, loadLatest, runScan, fetchCompany } from "./api.js";
 
 // Canonical display order for the 12 categories (matches backend category strings).
 const CATS = [
@@ -24,6 +24,9 @@ const state = {
   sortDir: 1,
   filter: "",
   live: false,
+  // What the current data actually is: "live" (backend result), "published"
+  // (a real engine scan baked into the static site), or "sample" (invented).
+  scanKind: "sample",
 };
 
 // ------------------------------------------------------------------ helpers
@@ -54,30 +57,56 @@ function toast(msg) {
 async function boot() {
   wireControls();
   state.live = await isLive();
-  updateModePill();
-  // Prefer a live latest scan; else the bundled sample (demo).
+  // Prefer a live latest scan; else the published REAL scan artifact; else sample.
   let scan = null;
-  if (state.live) scan = await loadLatest();
-  if (!scan) { try { scan = await loadSample(); if (!state.live) toast("Demo mode — showing bundled sample scan"); } catch (_e) {} }
+  if (state.live) { scan = await loadLatest(); if (scan) state.scanKind = "live"; }
+  if (!scan) {
+    try {
+      const { scan: s, kind } = await loadPublished();
+      scan = s; state.scanKind = kind;
+      if (!state.live) toast(kind === "published" ? "Showing the latest real engine scan" : "Demo mode — showing bundled sample scan");
+    } catch (_e) {}
+  }
+  updateModePill();
   if (scan) applyScan(scan);
   else renderEmpty("No scan available. Run a scan to begin.");
 }
 
 function updateModePill() {
   const pill = $("#modePill");
-  if (state.live) { pill.className = "mode-pill live"; pill.innerHTML = '<span class="dot"></span> Live · API connected'; }
-  else { pill.className = "mode-pill demo"; pill.innerHTML = '<span class="dot"></span> Demo · sample data'; }
+  const when = state.scan && state.scan.generated_at ? fmtTime(state.scan.generated_at) : null;
+  if (state.live) {
+    pill.className = "mode-pill live"; pill.innerHTML = '<span class="dot"></span> Live · API connected';
+  } else if (state.scanKind === "published") {
+    pill.className = "mode-pill live";
+    pill.innerHTML = '<span class="dot"></span> Real scan' + (when ? " · " + esc(when) : "");
+  } else {
+    pill.className = "mode-pill demo"; pill.innerHTML = '<span class="dot"></span> Demo · sample data';
+  }
   // Keep the Run button clickable even in demo mode — instead of a dead greyed-out
   // button, a click explains that live scans need the local backend.
   $("#runBtn").disabled = false;
-  $("#runBtn").title = state.live ? "Run a live scan" : "Live scans need the local backend — click to see how";
+  $("#runBtn").title = state.live ? "Run a live scan" : "Live re-scans need the local backend — click to see how";
   const note = $("#demoNote");
-  if (note) note.style.display = state.live ? "none" : "flex";
+  if (note) {
+    note.style.display = state.live ? "none" : "flex";
+    const txt = $("#demoNoteText");
+    if (txt && state.scanKind === "published") {
+      txt.innerHTML = 'You\'re viewing <b>real results</b> from a full engine scan' + (when ? ' generated <b>' + esc(when) + '</b>' : '') +
+        ' — actual publicly traded companies, ranked by evidence. This static page can\'t re-scan; for fresh live scans run <code>convexity serve</code> locally. Click <b>Run scan</b> for instructions.';
+    }
+  }
 }
 
 function applyScan(scan) {
   state.scan = scan;
-  state.rows = (scan.all_ranked && scan.all_ranked.length ? scan.all_ranked : scan.top || []).slice();
+  // Published artifacts slim the all_ranked entries to keep the payload small;
+  // overlay the full `top` entries (evidence + narratives) by ticker so the
+  // drill-down drawer stays rich for the names that matter most.
+  const fullByTicker = {};
+  (scan.top || []).forEach((c) => { fullByTicker[c.ticker] = c; });
+  const base = (scan.all_ranked && scan.all_ranked.length ? scan.all_ranked : scan.top || []);
+  state.rows = base.map((c) => fullByTicker[c.ticker] || c);
   renderAll();
 }
 
@@ -307,15 +336,17 @@ function wireControls() {
 
 function showBackendModal() {
   if ($("#backendModal")) return;
+  const published = state.scanKind === "published";
   const el = document.createElement("div");
   el.id = "backendModal";
   el.innerHTML = `
     <div class="bm-backdrop"></div>
     <div class="bm-card" role="dialog" aria-modal="true">
-      <div class="bm-title">This is the live demo — running on sample data</div>
+      <div class="bm-title">${published ? "You're already looking at real scan results" : "This is the live demo — running on sample data"}</div>
       <p class="bm-body">
-        You're viewing Convexity on GitHub&nbsp;Pages, which is a <b>static site with no backend</b>,
-        so there's nothing for a live scan to talk to. That's why <b>Run scan</b> can't execute here.
+        ${published
+          ? "This page shows the <b>latest real scan</b> from the Convexity engine — actual publicly traded companies ranked by evidence. But GitHub&nbsp;Pages is a <b>static site with no backend</b>, so it cannot run a <i>fresh</i> scan on demand."
+          : "You're viewing Convexity on GitHub&nbsp;Pages, which is a <b>static site with no backend</b>, so there's nothing for a live scan to talk to. That's why <b>Run scan</b> can't execute here."}
       </p>
       <p class="bm-body">To run real scans against live market data, start the backend on your machine:</p>
       <pre class="bm-code">git clone https://github.com/boydelliott242-art/convexity.git
@@ -325,7 +356,7 @@ pip install -e ".[dev]"
 convexity serve            <span class="bm-cmt"># then open http://localhost:8000</span></pre>
       <p class="bm-body">On <code>localhost:8000</code> the button runs a full live scan with progress. Prefer the terminal? <code>convexity scan --top-n 5</code>.</p>
       <div class="bm-actions">
-        <button class="btn ghost" id="bmSample">Explore the sample instead</button>
+        <button class="btn ghost" id="bmSample">${published ? "Back to the results" : "Explore the sample instead"}</button>
         <button class="btn primary" id="bmClose">Got it</button>
       </div>
     </div>`;
@@ -333,7 +364,11 @@ convexity serve            <span class="bm-cmt"># then open http://localhost:800
   const close = () => el.remove();
   el.querySelector(".bm-backdrop").addEventListener("click", close);
   el.querySelector("#bmClose").addEventListener("click", close);
-  el.querySelector("#bmSample").addEventListener("click", async () => { close(); try { applyScan(await loadSample()); toast("Showing the bundled sample scan"); } catch (_e) {} });
+  el.querySelector("#bmSample").addEventListener("click", async () => {
+    close();
+    if (published) return; // results are already on screen
+    try { applyScan(await loadSample()); toast("Showing the bundled sample scan"); } catch (_e) {}
+  });
   document.addEventListener("keydown", function esc(e) { if (e.key === "Escape") { close(); document.removeEventListener("keydown", esc); } });
 }
 
