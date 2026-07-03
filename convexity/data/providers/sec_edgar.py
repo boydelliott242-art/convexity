@@ -157,6 +157,18 @@ _EPS_DILUTED_CONCEPTS: Tuple[str, ...] = (
 _SHARES_DILUTED_CONCEPTS: Tuple[str, ...] = (
     "WeightedAverageNumberOfDilutedSharesOutstanding",
     "WeightedAverageNumberOfShareOutstandingBasicAndDiluted",
+    "WeightedAverageNumberOfSharesOutstandingBasic",
+)
+# Point-in-time share counts, used as a FALLBACK for ``shares_diluted`` when the
+# issuer tags no weighted-average series at all (common among smaller filers —
+# e.g. VTVT tags only CommonStockSharesOutstanding). Shares *outstanding* is a
+# point-in-time count rather than a period average; for the derived-market-cap
+# fallback (last close x shares) that is, if anything, the better input. The
+# flow ingest runs first and "first writer wins", so this never overrides a
+# weighted-average figure.
+_SHARES_OUTSTANDING_INSTANT_CONCEPTS: Tuple[str, ...] = (
+    "CommonStockSharesOutstanding",
+    "CommonStockSharesIssued",
 )
 
 # Flow (duration) vs. instant (point-in-time) concepts. Flow facts have a
@@ -178,6 +190,7 @@ _INSTANT_CONCEPTS: Set[str] = set(
     + _CASH_CONCEPTS
     + _LONG_TERM_DEBT_CONCEPTS
     + _SHORT_TERM_DEBT_CONCEPTS
+    + _SHARES_OUTSTANDING_INSTANT_CONCEPTS
 )
 
 
@@ -1141,6 +1154,9 @@ class SecEdgarProvider:
         ingest(_CAPEX_CONCEPTS, "capex", instant=False)
         ingest(_EPS_DILUTED_CONCEPTS, "eps_diluted", instant=False)
         ingest(_SHARES_DILUTED_CONCEPTS, "shares_diluted", instant=False)
+        # Fallback share count for issuers with no weighted-average series (first
+        # writer wins per period, so this never overrides the flow figure above).
+        ingest(_SHARES_OUTSTANDING_INSTANT_CONCEPTS, "shares_diluted", instant=True)
         ingest(_TOTAL_ASSETS_CONCEPTS, "total_assets", instant=True)
         ingest(_TOTAL_EQUITY_CONCEPTS, "total_equity", instant=True)
         ingest(_CASH_CONCEPTS, "cash_and_equivalents", instant=True)

@@ -251,7 +251,7 @@ class YFinanceProvider(DataProvider):
     _SECURITY_DATA_CACHE_KIND = "security_data"
     _QUOTES_CACHE_KIND = "quotes"
 
-    def __init__(self, cache: Optional[data_cache.Cache] = None) -> None:
+    def __init__(self, *, cache: Optional[data_cache.Cache] = None) -> None:
         """Initialise the ``fast_info`` throttle state and wire up the cache.
 
         The screening path issues one lightweight ``fast_info`` HTTP request per

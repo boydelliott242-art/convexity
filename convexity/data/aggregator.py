@@ -548,12 +548,26 @@ class CompositeProvider(DataProvider):
 
     @staticmethod
     def _instantiate(cls: Any, settings: Optional[Any]) -> Optional[DataProvider]:
-        """Instantiate a provider class, tolerating differing constructor signatures."""
-        # Prefer passing settings through when the provider accepts it; fall back
-        # to a no-arg construction for providers (e.g. yfinance) that take none.
-        attempts = ()
+        """Instantiate a provider class, tolerating differing constructor signatures.
+
+        Settings are forwarded ONLY when the constructor declares a parameter
+        actually named ``settings``. Passing them positionally is dangerous: a
+        provider whose first optional parameter is something else entirely (the
+        yfinance provider takes ``cache``) would silently swallow the Settings
+        object into the wrong slot — which is exactly the bug that disabled the
+        provider cache in production (``'Settings' object has no attribute
+        'get_data'``).
+        """
+        wants_settings = False
         if settings is not None:
-            attempts = ((settings,), {}), ((), {})
+            try:
+                import inspect
+
+                wants_settings = "settings" in inspect.signature(cls.__init__).parameters
+            except (TypeError, ValueError):  # pragma: no cover - builtins/odd callables
+                wants_settings = False
+        if wants_settings:
+            attempts = ((), {"settings": settings}), ((), {})
         else:
             attempts = ((), {}),
         last_exc: Optional[Exception] = None
