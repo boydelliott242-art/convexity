@@ -9,7 +9,7 @@
 ![CI](https://img.shields.io/badge/CI-GitHub%20Actions%20ready-6e9bff)
 ![Python](https://img.shields.io/badge/python-3.9%2B-6e9bff)
 ![License](https://img.shields.io/badge/license-MIT-46e0c0)
-![Tests](https://img.shields.io/badge/tests-313%20passing-3ed9a4)
+![Tests](https://img.shields.io/badge/tests-480%20passing-3ed9a4)
 ![Ruff](https://img.shields.io/badge/ruff-clean-46e0c0)
 
 **Live demo:** https://boydelliott242-art.github.io/convexity/ · **Repo:** https://github.com/boydelliott242-art/convexity
@@ -53,7 +53,7 @@ invalidate the thesis.
   optional premium providers (Financial Modeling Prep) unlock insider/institutional depth.
 - **Zero-build dashboard.** A self-contained dark, responsive analyst dashboard (hand-built SVG
   charts, drill-down evidence, filtering/sorting, CSV/JSON export) served by the API — no Node.
-- **Production shape.** FastAPI service, Typer CLI, 313 offline/deterministic tests, ruff, type
+- **Production shape.** FastAPI service, Typer CLI, 480 offline/deterministic tests, ruff, type
   hints throughout, Docker + docker-compose, GitHub Actions CI.
 
 ## Quickstart
@@ -139,8 +139,13 @@ Interactive OpenAPI docs are served at `/docs`.
 | Provider | Needs key | Supplies |
 | --- | --- | --- |
 | **Yahoo Finance** (`yfinance`) | no | prices, fundamentals, valuation, news, quick screening |
-| **SEC EDGAR** | no (just a User-Agent) | company facts, filings |
+| **SEC EDGAR** | no (just a User-Agent) | company facts, filings, **Form 4 insider transactions**, share counts |
 | **Financial Modeling Prep** | `FMP_API_KEY` | statements, insider trades, institutional ownership |
+
+All fetches are throttle-resilient: complete responses are disk-cached (partial or rate-limited
+responses are deliberately **never** cached), and when the valuation endpoint is unavailable the
+market cap is derived from last close × reported shares — real arithmetic on real data, always
+labeled with its provenance in `data_warnings`.
 
 The universe builder pulls the full list of U.S.-listed common stocks (Nasdaq Trader symbol
 files, with an SEC fallback) and filters ETFs/funds/warrants/units before screening by cap and
@@ -169,7 +174,7 @@ docker compose run --rm convexity convexity scan --top-n 5 --universe-limit 60
 ## Testing & quality
 
 ```bash
-make test     # 313 tests, fully offline & deterministic (synthetic FakeProvider)
+make test     # 480 tests, fully offline & deterministic (synthetic FakeProvider)
 make lint     # ruff
 make cov      # coverage report
 ```
