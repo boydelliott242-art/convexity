@@ -68,6 +68,16 @@ class TestInvestmentVehiclesExcluded:
             # BREZ: blank-check shell — "Acquisition Corp." with punctuation
             # after "Corp" must still match (word-boundary, not whole-word-list).
             ("BREZ", "Breeze Acquisition Corp. II", "spac"),
+            # GAIN / GLAD: BDCs (registered investment companies) whose names
+            # carry NO fund vocabulary at all — the real escapee from the
+            # 2026-07-01 full scan. Only the decisive whole-name identity
+            # catches them — in the full spelling, the abbreviated "Corp."
+            # the CQS/other-listed directory uses, and the incident's casing.
+            ("GAIN", "Gladstone Investment Corporation", "fund_family"),
+            ("GLAD", "Gladstone Capital Corporation", "fund_family"),
+            ("GAIN", "Gladstone Investment Corp.", "fund_family"),
+            ("GLAD", "Gladstone Capital Corp.", "fund_family"),
+            ("GAIN", "GLADSTONE INVESTMENT CORPORATION", "fund_family"),
         ],
     )
     def test_real_escapees_are_excluded(
@@ -181,6 +191,12 @@ class TestOperatingCompaniesKept:
             # (conservative — when in doubt, keep).
             ("TCPC", "BlackRock TCP Capital Corp."),
             ("IVR", "Invesco Mortgage Capital Inc."),
+            # Gladstone OPERATING companies: the BDC exclusions above key on
+            # the "Capital"/"Investment" token (whole-name identities), so the
+            # family's farmland REIT and net-lease REIT stay in the universe.
+            ("LAND", "Gladstone Land Corporation"),
+            ("GOOD", "Gladstone Commercial Corporation"),
+            ("LAND", "Gladstone Land Corp."),
         ],
     )
     def test_operating_companies_survive(self, ticker: str, name: str) -> None:

@@ -209,18 +209,29 @@ _CEF_NAME_PATTERNS: Tuple[str, ...] = (
     "strategic income",
 )
 
-# Curated CEF name prefixes where the prefix *is* the fund's identity ("ASA
-# Gold & Precious Metals", "Tri-Continental Corporation", "Liberty All-Star
-# Equity Fund", …). A prefix match alone is decisive: no US-listed operating
-# company shares these prefixes. Matched as a lowercased, whitespace-stripped
-# name PREFIX (never as a substring, so e.g. "Artisan Partners Asset
-# Management" — an operating manager — is untouched).
+# Curated fund/vehicle name prefixes where the prefix *is* the vehicle's
+# identity ("ASA Gold & Precious Metals", "Tri-Continental Corporation",
+# "Liberty All-Star Equity Fund", …). A prefix match alone is decisive: no
+# US-listed operating company shares these prefixes. Matched as a lowercased,
+# whitespace-stripped name PREFIX (never as a substring, so e.g. "Artisan
+# Partners Asset Management" — an operating manager — is untouched).
+#
+# The two Gladstone entries are BDCs (business development companies —
+# registered investment companies under the '40 Act) whose names carry NO fund
+# vocabulary at all, so only their whole registered name identifies them. The
+# "… corp" stem (matching both "Corp." and "Corporation" — listing directories
+# abbreviate inconsistently) is deliberate: what distinguishes the BDCs from
+# the family's OPERATING companies — "Gladstone Land Corporation" (a farmland
+# REIT) and "Gladstone Commercial Corporation" (a net-lease REIT), which must
+# be kept — is the "Capital"/"Investment" token, not the corporate suffix.
 _CEF_FUND_NAME_PREFIXES: Tuple[str, ...] = (
     "adams diversified",
     "adams natural resources",
     "asa gold",
     "central securities",
     "general american investors",
+    "gladstone capital corp",
+    "gladstone investment corp",
     "liberty all-star",
     "source capital",
     "tortoise",

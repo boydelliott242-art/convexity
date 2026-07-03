@@ -53,6 +53,13 @@ from convexity.core.models import (
 )
 from convexity.core.registry import get_providers
 
+# Reuse the exact cap-tier thresholds the providers already apply when they
+# classify a provider-supplied market cap (nano < ~$50M, micro < ~$300M,
+# small < ~$2B, >= ~$2B -> None). Importing the provider's classifier — rather
+# than writing a third copy — keeps the derived-cap fallback below in lockstep
+# with how ``cap_tier`` is normally assigned.
+from convexity.data.providers.yfinance_provider import _classify_cap_tier
+
 _log = get_logger(__name__)
 
 
@@ -388,6 +395,62 @@ def merge_security_data(base: SecurityData, incoming: SecurityData) -> SecurityD
 
 
 # ---------------------------------------------------------------------------
+# Post-merge normalisation: derived market cap (labelled, never fabricated)
+# ---------------------------------------------------------------------------
+
+#: Exact provenance note appended whenever the fallback below derives a cap.
+#: It names both approximations: the diluted share count is the latest reported
+#: period's WEIGHTED AVERAGE (what both yfinance's "Diluted Average Shares" and
+#: SEC EDGAR's WeightedAverageNumberOfDilutedSharesOutstanding report), not
+#: today's shares outstanding, and that period may lag the price by a quarter+.
+_DERIVED_MARKET_CAP_WARNING = (
+    "market cap derived from last close x diluted shares "
+    "(approximation: period-average diluted shares from the latest reported "
+    "fundamentals, not current shares outstanding; info endpoint unavailable)"
+)
+
+
+def _apply_market_cap_fallback(merged: SecurityData) -> None:
+    """Back-fill a missing market cap (and cap tier) from real, on-hand inputs.
+
+    A rate-limited quote/info endpoint frequently leaves ``valuation.market_cap``
+    ``None`` even though the price history (a separate, un-throttled endpoint)
+    and ``shares_diluted`` (SEC companyfacts) both arrived. When — and only
+    when — **both** of those real inputs are present, the cap is *derived* as
+    ``last close × diluted shares`` and an explicit provenance note is appended
+    to ``data_warnings`` so the reader knows the figure is arithmetic on real
+    data rather than a provider-supplied quote — and that the share count is the
+    latest period's *weighted average* diluted shares (both share sources report
+    period averages), so the figure approximates a true point-in-time cap.
+    Nothing is ever guessed:
+
+    * a provider-supplied market cap is **never** overwritten;
+    * if the price history is empty, or the latest fundamentals period is
+      missing / carries no positive ``shares_diluted``, no cap is derived and
+      the field honestly stays ``None``.
+
+    ``cap_tier`` is likewise back-filled from the (possibly derived) market cap
+    when no provider assigned one, using the same thresholds the providers use,
+    so a derived cap keeps the record screenable by tier.
+
+    Mutates ``merged`` in place (it is the composite's own post-merge copy);
+    the valuation snapshot is *replaced*, not mutated, because it may still be
+    shared with a provider-cached object via the shallow merge copies.
+    """
+    if merged.valuation.market_cap is None and merged.price_history:
+        last_close = merged.price_history[-1].close  # price_history is oldest-first
+        latest = merged.latest_fundamentals
+        shares = latest.shares_diluted if latest is not None else None
+        if last_close > 0 and shares is not None and shares > 0:
+            merged.valuation = merged.valuation.model_copy(
+                update={"market_cap": last_close * shares}
+            )
+            merged.data_warnings.append(_DERIVED_MARKET_CAP_WARNING)
+    if merged.cap_tier is None:
+        merged.cap_tier = _classify_cap_tier(merged.valuation.market_cap)
+
+
+# ---------------------------------------------------------------------------
 # The composite provider
 # ---------------------------------------------------------------------------
 
@@ -677,6 +740,11 @@ class CompositeProvider(DataProvider):
 
         # Record the canonical, de-duplicated provenance.
         merged.data_sources = _merge_str_list(merged.data_sources, contributed)
+
+        # Post-merge normalisation: only after every provider has had its say
+        # (so a real, provider-supplied market cap always wins) derive a missing
+        # cap from last close × diluted shares, with an explicit provenance note.
+        _apply_market_cap_fallback(merged)
 
         _log.info(
             "composite assembled %s from %d source(s): %s",

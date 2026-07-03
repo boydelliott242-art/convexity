@@ -32,6 +32,7 @@ market-cap / average-dollar-volume quotes consumed by
 from __future__ import annotations
 
 import datetime as _dt
+import hashlib
 import math
 import threading
 import time
@@ -49,8 +50,16 @@ from convexity.core.models import (
     ValuationSnapshot,
 )
 from convexity.core.registry import register_provider
+from convexity.data import cache as data_cache
 
 _log = get_logger(__name__)
+
+#: TTL (seconds) for cached screening-quote chunks. Deliberately short (~4 hours):
+#: screening quotes are point-in-time liquidity/cap figures, so a re-run within
+#: the window can skip re-screening the same chunk, while anything older is
+#: refetched live. Keyed per chunk so partial coverage from an interrupted or
+#: rate-limited screen still persists chunk-by-chunk.
+_QUOTES_CACHE_TTL_SECONDS = 4 * 60 * 60
 
 
 # ---------------------------------------------------------------------------
@@ -238,17 +247,115 @@ class YFinanceProvider(DataProvider):
     _MAX_ANNUAL_PERIODS = 5
     _MAX_QUARTERLY_PERIODS = 1
     _MAX_NEWS = 25
+    #: Cache ``kind`` labels (see :func:`convexity.data.cache.make_key`).
+    _SECURITY_DATA_CACHE_KIND = "security_data"
+    _QUOTES_CACHE_KIND = "quotes"
 
-    def __init__(self) -> None:
-        """Initialise the per-instance ``fast_info`` throttle state.
+    def __init__(self, cache: Optional[data_cache.Cache] = None) -> None:
+        """Initialise the ``fast_info`` throttle state and wire up the cache.
 
         The screening path issues one lightweight ``fast_info`` HTTP request per
         prefilter-clearing symbol; across a full listing that is thousands of
         requests, so they are paced (see ``_fast_info_throttle``). The lock makes
         the pacing correct even if a caller shares one provider across threads.
+
+        Args:
+            cache: Optional :class:`~convexity.data.cache.Cache` to memoise
+                fetches on (mainly for tests). ``None`` resolves lazily to the
+                process-wide default cache, so constructing the provider (as the
+                registry does at import time) never touches the disk.
         """
         self._fast_info_lock = threading.Lock()
         self._last_fast_info_ts = 0.0
+        self._cache = cache
+
+    # -- caching plumbing ----------------------------------------------------
+    #
+    # Honesty rule: caching changes *when* we fetch, never *what* we report.
+    # Only a COMPLETE fetch (see ``_is_complete_fetch``) is written to the
+    # cache; a partial one — e.g. Yahoo's ``info`` endpoint rate-limited so the
+    # market cap is unknown — is still returned to the caller with its
+    # ``data_warnings`` intact, but is NOT cached, so a later healthy run
+    # refetches instead of serving the gap for the whole TTL. Every cache
+    # failure (open, read, parse, write) degrades to a live fetch; it is never
+    # allowed to break the provider.
+
+    def _resolve_cache(self) -> Optional[data_cache.Cache]:
+        """Return the cache to use, or ``None`` if none can be obtained."""
+        if self._cache is not None:
+            return self._cache
+        try:
+            return data_cache.get_cache()
+        except Exception as exc:  # pragma: no cover - defensive
+            _log.warning("provider cache unavailable (%s); fetching live", exc)
+            return None
+
+    def _cache_load_security_data(self, symbol: str) -> Optional[SecurityData]:
+        """Return a fresh cached :class:`SecurityData` for ``symbol``, else ``None``.
+
+        Any cache read error or validation failure is logged and treated as a
+        miss (forcing a live fetch) — corrupt cache content is never served.
+        """
+        store = self._resolve_cache()
+        if store is None:
+            return None
+        try:
+            payload = store.get_data(self.name, symbol, self._SECURITY_DATA_CACHE_KIND)
+        except Exception as exc:
+            _log.warning(
+                "cache read failed for %s security_data (%s); fetching live", symbol, exc
+            )
+            return None
+        if not isinstance(payload, dict):
+            return None
+        try:
+            return SecurityData.model_validate(payload)
+        except Exception as exc:
+            _log.warning(
+                "cached security_data for %s failed validation (%s); refetching", symbol, exc
+            )
+            return None
+
+    def _cache_store_security_data(self, symbol: str, sec: SecurityData) -> None:
+        """Serialise ``sec`` to the cache (default TTL); failures degrade silently."""
+        store = self._resolve_cache()
+        if store is None:
+            return
+        try:
+            store.set_data(
+                self.name,
+                symbol,
+                self._SECURITY_DATA_CACHE_KIND,
+                sec.model_dump(mode="json"),
+            )
+        except Exception as exc:
+            _log.warning("could not cache security_data for %s (%s)", symbol, exc)
+
+    @staticmethod
+    def _is_complete_fetch(
+        info: Dict[str, Any],
+        market_cap: Optional[float],
+        price_history: List[PriceBar],
+        warnings: List[str],
+    ) -> bool:
+        """Decide whether a just-assembled fetch is complete enough to cache.
+
+        A fetch is *complete* when the ``info`` endpoint answered with a usable
+        market cap, price bars came back, and no sub-fetch raised (every raised
+        sub-fetch appends a ``"failed to fetch ..."`` warning — the signature of
+        rate limiting or a transient outage). Genuinely absent data that Yahoo
+        answered *about* (e.g. ``"no fundamentals ... available"`` or
+        ``"no recent news"`` for a thin micro-cap) does not block caching: the
+        TTL bounds its staleness and the warnings travel with the cached object.
+
+        Requiring the market cap is deliberate (the incident this guards
+        against): a throttled ``info`` endpoint yields an UNKNOWN cap, and
+        caching that would freeze the gap for the whole TTL. The cost of the
+        strictness is only an extra refetch, never a wrong value.
+        """
+        if not info or market_cap is None or not price_history:
+            return False
+        return not any("failed to fetch" in w for w in warnings)
 
     @property
     def name(self) -> str:
@@ -271,10 +378,21 @@ class YFinanceProvider(DataProvider):
         cannot be identified at all, and
         :class:`~convexity.core.exceptions.ProviderError` if the yfinance library
         itself is unavailable.
+
+        Fetches are memoised on the freshness-bounded disk cache
+        (:mod:`convexity.data.cache`, default ``cache_ttl_seconds``): a fresh
+        cached fetch is served without any network, and only *complete* fetches
+        are cached (see ``_is_complete_fetch``) so a rate-limited partial result
+        is returned once — warnings intact — but never frozen into the cache.
         """
         symbol = (ticker or "").strip().upper()
         if not symbol:
             raise DataUnavailable("empty ticker symbol", ticker=ticker)
+
+        cached = self._cache_load_security_data(symbol)
+        if cached is not None:
+            _log.debug("yfinance served %s from cache", symbol)
+            return cached
 
         yf = self._import_yfinance()
         warnings: List[str] = []
@@ -329,6 +447,18 @@ class YFinanceProvider(DataProvider):
             len(news),
             len(warnings),
         )
+        # HONESTY: cache only complete fetches. A partial result (rate-limited
+        # info endpoint, missing market cap, failed sub-fetch) is returned to
+        # the caller with its warnings, but a later healthy run must refetch it.
+        if self._is_complete_fetch(info, market_cap, price_history, warnings):
+            self._cache_store_security_data(symbol, sec)
+        else:
+            _log.info(
+                "yfinance: not caching %s (incomplete fetch, %d warning(s)); "
+                "a later run will refetch",
+                symbol,
+                len(warnings),
+            )
         return sec
 
     # -- batched screening quotes (universe construction) --------------------
@@ -399,6 +529,17 @@ class YFinanceProvider(DataProvider):
 
         Never raises: a failed chunk or symbol is logged and skipped so one bad
         batch cannot abort a full-universe screen.
+
+        Each chunk's result is cached for a short window
+        (``_QUOTES_CACHE_TTL_SECONDS``, ~4h) keyed by a hash of the sorted chunk
+        symbols, so a re-run within the window serves the chunk from the cache
+        instead of re-screening — and because the key is per chunk, the coverage
+        an interrupted or partially rate-limited screen *did* achieve persists.
+        HONESTY: only *complete* chunks are cached (see
+        ``_quotes_chunk_is_complete``): a chunk that yielded nothing (download
+        failure, dead symbols) or whose per-symbol market-cap lookups were
+        rate-limited — liquid quotes missing their caps, the incident signature —
+        is always retried live rather than frozen capless for the whole window.
         """
         symbols: List[str] = []
         seen: Set[str] = set()
@@ -421,11 +562,18 @@ class YFinanceProvider(DataProvider):
             symbols[i : i + self._QUOTE_CHUNK_SIZE]
             for i in range(0, len(symbols), self._QUOTE_CHUNK_SIZE)
         ]
+        fetched_any = False  # pace only between *network* chunks, not cache hits
         for idx, chunk in enumerate(chunks):
-            if idx > 0 and self._QUOTE_CHUNK_SLEEP_SECONDS > 0:
+            cached = self._cache_load_quotes_chunk(chunk)
+            if cached is not None:
+                _log.debug("quote chunk %d/%d served from cache", idx + 1, len(chunks))
+                out.update(cached)
+                continue
+            if fetched_any and self._QUOTE_CHUNK_SLEEP_SECONDS > 0:
                 time.sleep(self._QUOTE_CHUNK_SLEEP_SECONDS)
+            fetched_any = True
             try:
-                self._quote_chunk(yf, chunk, out)
+                chunk_quotes = self._quote_chunk(yf, chunk)
             except Exception as exc:  # defensive: one bad chunk never aborts the screen
                 _log.warning(
                     "yfinance quote chunk %d/%d failed (%s: %s); skipping %d symbols",
@@ -435,6 +583,123 @@ class YFinanceProvider(DataProvider):
                     exc,
                     len(chunk),
                 )
+                continue
+            out.update(chunk_quotes)
+            # HONESTY: cache only complete chunks. A chunk whose liquid symbols
+            # are missing their market caps was hit by fast_info rate limiting
+            # (the bulk chart download succeeded but the per-symbol cap endpoint
+            # was throttled — the exact incident signature); caching it would
+            # serve capless quotes for the whole TTL and silently shrink every
+            # re-screen's universe. It is returned to the caller as-is, but a
+            # later run must refetch it live.
+            if self._quotes_chunk_is_complete(chunk_quotes):
+                self._cache_store_quotes_chunk(chunk, chunk_quotes)
+            elif chunk_quotes:
+                _log.info(
+                    "yfinance: not caching a %d-symbol quote chunk "
+                    "(liquid symbols missing market caps — rate-limited?); "
+                    "a later run will re-screen it",
+                    len(chunk),
+                )
+        return out
+
+    # -- screening-quote chunk cache -----------------------------------------
+
+    @classmethod
+    def _quotes_chunk_is_complete(cls, quotes: Dict[str, Dict[str, float]]) -> bool:
+        """Decide whether a just-fetched quote chunk is complete enough to cache.
+
+        A chunk is *complete* when it is non-empty and every symbol that cleared
+        the market-cap prefilter (``avg_dollar_volume >=
+        _MCAP_PREFILTER_MIN_DOLLAR_VOLUME`` — exactly the condition under which
+        ``_quote_chunk`` attempts a ``fast_info`` cap lookup) actually carries a
+        ``market_cap``. A liquid quote *without* a cap means the per-symbol cap
+        lookup failed — under load that is Yahoo rate-limiting ``fast_info``
+        while the bulk chart download still succeeds (the 2026-07 incident
+        signature) — and caching it would freeze capless quotes for the whole
+        TTL, silently excluding those names from every re-screen in the window.
+
+        Symbols *below* the prefilter carry no cap by design (the screen excludes
+        them conservatively rather than us guessing), so their capless quotes do
+        not block caching. The cost of the strictness is only an extra
+        re-screen of the chunk, never a wrong or frozen-partial value.
+        """
+        if not quotes:
+            return False
+        for quote in quotes.values():
+            adv = quote.get("avg_dollar_volume")
+            if (
+                adv is not None
+                and adv >= cls._MCAP_PREFILTER_MIN_DOLLAR_VOLUME
+                and "market_cap" not in quote
+            ):
+                return False
+        return True
+
+    @staticmethod
+    def _quotes_chunk_hash(chunk: Sequence[str]) -> str:
+        """Return a stable hex digest of the sorted chunk symbols (the cache key's
+        ticker slot); the same set of symbols always maps to the same slot."""
+        joined = "|".join(sorted(str(s).strip().upper() for s in chunk))
+        return hashlib.sha256(joined.encode("utf-8")).hexdigest()
+
+    def _cache_load_quotes_chunk(
+        self, chunk: Sequence[str]
+    ) -> Optional[Dict[str, Dict[str, float]]]:
+        """Return a fresh cached quote dict for ``chunk``, else ``None``.
+
+        Read errors and malformed payloads are logged misses — corrupt cache
+        content forces a live re-screen, it is never served.
+        """
+        store = self._resolve_cache()
+        if store is None:
+            return None
+        try:
+            payload = store.get_data(self.name, self._quotes_chunk_hash(chunk), self._QUOTES_CACHE_KIND)
+        except Exception as exc:
+            _log.warning("cache read failed for a quote chunk (%s); fetching live", exc)
+            return None
+        return self._restore_cached_quotes(payload)
+
+    def _cache_store_quotes_chunk(
+        self, chunk: Sequence[str], quotes: Dict[str, Dict[str, float]]
+    ) -> None:
+        """Cache one chunk's quotes under the short screening TTL; never raises."""
+        store = self._resolve_cache()
+        if store is None:
+            return
+        try:
+            store.set_data(
+                self.name,
+                self._quotes_chunk_hash(chunk),
+                self._QUOTES_CACHE_KIND,
+                quotes,
+                ttl=_QUOTES_CACHE_TTL_SECONDS,
+            )
+        except Exception as exc:
+            _log.warning("could not cache a %d-symbol quote chunk (%s)", len(chunk), exc)
+
+    @staticmethod
+    def _restore_cached_quotes(payload: Any) -> Optional[Dict[str, Dict[str, float]]]:
+        """Rebuild a ``{ticker: {figure: float}}`` quote dict from cached JSON.
+
+        Returns ``None`` (a miss, forcing a live fetch) if any entry is not the
+        expected shape or any figure is not a finite number — a corrupt cached
+        chunk must never leak fabricated-looking values into a screen.
+        """
+        if not isinstance(payload, dict) or not payload:
+            return None
+        out: Dict[str, Dict[str, float]] = {}
+        for sym, quote in payload.items():
+            if not isinstance(quote, dict):
+                return None
+            clean: Dict[str, float] = {}
+            for key, value in quote.items():
+                num = _to_float(value)
+                if num is None:
+                    return None
+                clean[str(key)] = num
+            out[str(sym).upper()] = clean
         return out
 
     @staticmethod
@@ -447,8 +712,14 @@ class YFinanceProvider(DataProvider):
         """
         return ticker.strip().upper().replace(".", "-").replace("/", "-").replace("$", "-")
 
-    def _quote_chunk(self, yf: Any, chunk: List[str], out: Dict[str, Dict[str, float]]) -> None:
-        """Fetch one chunk of screening quotes into ``out`` (best-effort, no raise)."""
+    def _quote_chunk(self, yf: Any, chunk: List[str]) -> Dict[str, Dict[str, float]]:
+        """Fetch one chunk of screening quotes (best-effort, no raise).
+
+        Returns the chunk's own ``{ticker: figures}`` dict — empty on a failed
+        or empty download — so the caller can both merge it into the overall
+        result and decide whether the chunk is worth caching.
+        """
+        out: Dict[str, Dict[str, float]] = {}
         yahoo_by_symbol = {sym: self._to_yahoo_symbol(sym) for sym in chunk}
         try:
             data = yf.download(
@@ -467,10 +738,10 @@ class YFinanceProvider(DataProvider):
                 type(exc).__name__,
                 exc,
             )
-            return
+            return out
         if data is None or getattr(data, "empty", True):
             _log.warning("yf.download returned no data for a %d-symbol chunk", len(chunk))
-            return
+            return out
 
         single = len(yahoo_by_symbol) == 1
         for sym, ysym in yahoo_by_symbol.items():
@@ -491,6 +762,7 @@ class YFinanceProvider(DataProvider):
                 if market_cap is not None:
                     quote["market_cap"] = market_cap
             out[sym] = quote
+        return out
 
     @staticmethod
     def _extract_symbol_frame(data: Any, yahoo_symbol: str, *, single: bool) -> Any:

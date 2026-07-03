@@ -893,6 +893,37 @@ class FakeProvider(DataProvider):
 # ---------------------------------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def _isolated_provider_cache(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+):
+    """Point the process-wide provider cache at a per-test temporary directory.
+
+    Providers memoise fetches through :func:`convexity.data.cache.get_cache`,
+    which by default persists under ``Settings.data_dir`` (``./.convexity_data``).
+    Left unpatched, one test's cached quotes/fetches would leak into another —
+    and into *real* runs of the tool from this working tree. This fixture lazily
+    substitutes a fresh, throwaway :class:`~convexity.data.cache.Cache` per test
+    (created only if the test actually touches the cache) so every test starts
+    cold and leaves nothing behind.
+    """
+    from convexity.core.config import Settings
+    from convexity.data import cache as cache_mod
+
+    created: List[cache_mod.Cache] = []
+
+    def _test_cache() -> cache_mod.Cache:
+        if not created:
+            base = tmp_path_factory.mktemp("convexity-cache")
+            created.append(cache_mod.Cache(Settings(data_dir=str(base))))
+        return created[0]
+
+    monkeypatch.setattr(cache_mod, "get_cache", _test_cache)
+    yield
+    for cache in created:
+        cache.close()
+
+
 @pytest.fixture()
 def fake_provider() -> FakeProvider:
     """A fresh :class:`FakeProvider` over the six synthetic companies."""
