@@ -315,7 +315,10 @@ def _investment_vehicle_reason(name: str) -> Optional[str]:
         ``"spac"``, ``"fund_family"`` or ``"closed_end_fund"`` when the name
         marks a vehicle; ``None`` when it looks like an operating company.
     """
-    lower_name = name.strip().lower()
+    # Collapse whitespace runs: exchange directories pad names inconsistently
+    # (the real NYSE record reads "ASA  Gold and Precious Metals Limited" with a
+    # double space, which silently defeated a prefix match).
+    lower_name = " ".join(name.split()).lower()
     if lower_name.startswith("the "):
         lower_name = lower_name[4:]
     if _SPAC_NAME_RE.search(lower_name):

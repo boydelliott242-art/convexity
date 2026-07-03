@@ -65,6 +65,10 @@ class TestInvestmentVehiclesExcluded:
             ),
             # ASA: the "asa gold" prefix marks the fund.
             ("ASA", "ASA Gold & Precious Metals Limited", "fund_family"),
+            # ASA as the NYSE directory actually spells it — with a DOUBLE space,
+            # which defeated the prefix match in a real full-universe scan until
+            # name normalization collapsed whitespace runs.
+            ("ASA", "ASA  Gold and Precious Metals Limited", "fund_family"),
             # BREZ: blank-check shell — "Acquisition Corp." with punctuation
             # after "Corp" must still match (word-boundary, not whole-word-list).
             ("BREZ", "Breeze Acquisition Corp. II", "spac"),
