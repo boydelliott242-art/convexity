@@ -56,3 +56,6 @@ __pycache__/
 
 # scan outputs & local data dir
 /data/
+
+# published scan artifact lives on gh-pages, not main
+frontend/latest_scan.json
