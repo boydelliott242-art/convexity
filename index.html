@@ -44,7 +44,7 @@
       <div class="row">
         <div class="field">
           <label>Min market cap <span class="val" id="minCapVal"></span></label>
-          <input type="range" id="minCap" min="10000000" max="1000000000" step="10000000" value="50000000" data-out="minCapVal" data-fmt="cap" />
+          <input type="range" id="minCap" min="10000000" max="1000000000" step="10000000" value="10000000" data-out="minCapVal" data-fmt="cap" />
         </div>
         <div class="field">
           <label>Max market cap <span class="val" id="maxCapVal"></span></label>
@@ -52,11 +52,11 @@
         </div>
         <div class="field">
           <label>Top N</label>
-          <input type="number" id="topN" min="3" max="25" value="5" />
+          <input type="number" id="topN" min="3" max="25" value="25" />
         </div>
         <div class="field">
-          <label>Universe limit <span class="val">(scan speed)</span></label>
-          <input type="number" id="uniLimit" min="10" max="2000" value="60" />
+          <label>Universe limit <span class="val">(empty = full universe)</span></label>
+          <input type="number" id="uniLimit" min="10" max="2000" placeholder="full universe" />
         </div>
         <div class="actions">
           <button class="btn ghost" id="loadSampleBtn">Load sample</button>
