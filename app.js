@@ -3,7 +3,7 @@
    ========================================================================== */
 
 import { scoreColor, convictionDots, heatStrip, radarChart, compositeBars, convictionScatter, gauge } from "./charts.js";
-import { isLive, loadSample, loadPublished, loadLatest, runScan, fetchCompany } from "./api.js";
+import { isLive, loadSample, loadPublished, loadLatest, startScan, followScan, scanStatus, activeScans, fetchCompany } from "./api.js";
 
 // Canonical display order for the 12 categories (matches backend category strings).
 const CATS = [
@@ -54,6 +54,8 @@ function toast(msg) {
 }
 
 // ------------------------------------------------------------------ load
+const JOB_KEY = "convexity_active_job";
+
 async function boot() {
   wireControls();
   state.live = await isLive();
@@ -70,6 +72,32 @@ async function boot() {
   updateModePill();
   if (scan) applyScan(scan);
   else renderEmpty("No scan available. Run a scan to begin.");
+  // Reattach to any scan still running server-side (page reload, browser that
+  // lost track). Checks the remembered job first, then asks the server.
+  if (state.live) reattachIfRunning();
+}
+
+async function reattachIfRunning() {
+  let id = null;
+  const saved = localStorage.getItem(JOB_KEY);
+  if (saved) {
+    const st = await scanStatus(saved);
+    if (st && (st.status === "pending" || st.status === "running")) id = saved;
+    else if (st && st.status === "completed") {
+      // Finished while we were away — show it.
+      localStorage.removeItem(JOB_KEY);
+      const latest = await loadLatest();
+      if (latest) { state.scanKind = "live"; applyScan(latest); updateModePill(); toast("Your scan finished while you were away — showing results"); }
+    } else localStorage.removeItem(JOB_KEY);
+  }
+  if (!id) {
+    const jobs = await activeScans();
+    if (jobs.length) id = jobs[0].id;
+  }
+  if (!id) return;
+  localStorage.setItem(JOB_KEY, id);
+  toast("Reattached to your running scan");
+  await watchJob(id);
 }
 
 function updateModePill() {
@@ -380,20 +408,41 @@ async function doScan() {
     top_n: Number($("#topN").value),
     universe_limit: Number($("#uniLimit").value) || null,
   };
+  try {
+    const id = await startScan(params);
+    localStorage.setItem(JOB_KEY, id);
+    await watchJob(id);
+  } catch (e) {
+    $("#progressStage").textContent = "scan failed to start: " + e.message;
+    toast("Scan failed to start — " + e.message);
+    $("#runBtn").disabled = false;
+  }
+}
+
+/* Drive the progress UI for a scan until the server declares it finished.
+   Survives page reloads: boot() calls this again via reattachIfRunning(). */
+async function watchJob(id) {
   const pw = $("#progressWrap"); pw.classList.add("active");
   const bar = $("#progressBar"), stage = $("#progressStage"), pctEl = $("#progressPct");
   $("#runBtn").disabled = true;
+  let lastPct = 0;
   try {
-    const result = await runScan(params, (p) => {
-      bar.style.width = (p.pct || 0) + "%";
+    const result = await followScan(id, (p) => {
+      if (p.stalled) { stage.textContent = p.message; return; }
+      lastPct = p.pct || lastPct;
+      bar.style.width = lastPct + "%";
       stage.textContent = p.message || p.stage || "working…";
-      pctEl.textContent = (p.pct || 0) + "%";
+      pctEl.textContent = lastPct + "%";
     });
+    localStorage.removeItem(JOB_KEY);
     bar.style.width = "100%"; stage.textContent = "complete"; pctEl.textContent = "100%";
+    state.scanKind = "live";
     applyScan(result);
+    updateModePill();
     toast("Scan complete");
     setTimeout(() => pw.classList.remove("active"), 900);
   } catch (e) {
+    localStorage.removeItem(JOB_KEY);
     stage.textContent = "scan failed: " + e.message;
     toast("Scan failed — " + e.message);
   } finally { $("#runBtn").disabled = false; }
