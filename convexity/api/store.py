@@ -243,6 +243,20 @@ class ScanJobStore:
                 if j.status in (ScanStatus.PENDING, ScanStatus.RUNNING)
             )
 
+    def active_jobs(self) -> List[ScanJob]:
+        """All jobs currently ``PENDING`` or ``RUNNING``, newest first.
+
+        Lets a reconnecting dashboard rediscover an in-flight scan (e.g. after a
+        page reload or a browser that gave up watching) without knowing its id.
+        """
+        with self._lock:
+            active = [
+                j
+                for j in self._jobs.values()
+                if j.status in (ScanStatus.PENDING, ScanStatus.RUNNING)
+            ]
+        return list(reversed(active))
+
     def total_count(self) -> int:
         """Total number of jobs currently retained in memory."""
         with self._lock:

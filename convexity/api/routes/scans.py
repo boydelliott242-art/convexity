@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
+from typing import List
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, status
 from fastapi.responses import StreamingResponse
@@ -125,6 +126,23 @@ def latest_scan() -> ScanResultResponse:
             detail="No completed scan is available yet.",
         )
     return ScanResultResponse(job_id="latest", result=result)
+
+
+@router.get(
+    "/active",
+    response_model=List[ScanJobSummary],
+    summary="List scans that are currently pending or running",
+)
+def active_scans() -> List[ScanJobSummary]:
+    """Return summaries of every in-flight scan, newest first.
+
+    Lets a dashboard that lost track of a scan (page reload, browser sleep, a
+    client that stopped watching) rediscover and reattach to it without knowing
+    the job id. Declared before ``/{job_id}`` so "active" is never captured as
+    an id.
+    """
+    store = get_store()
+    return [ScanJobSummary.from_job(job) for job in store.active_jobs()]
 
 
 @router.get(

@@ -59,6 +59,12 @@ export async function loadLatest() {
 /* Start a live scan; stream progress via SSE; resolve with the ScanResult.
    onProgress({stage, done, total, message, pct}). */
 export async function runScan(params, onProgress) {
+  const id = await startScan(params);
+  return await followScan(id, onProgress);
+}
+
+/* Start a scan and return its job id (so callers can persist it for reattach). */
+export async function startScan(params) {
   const r = await fetch(`${API_BASE}/scans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -66,9 +72,27 @@ export async function runScan(params, onProgress) {
   });
   if (!r.ok) throw new Error(`scan start failed (${r.status})`);
   const job = await r.json();
-  const id = job.id;
-  if (!id) throw new Error("no scan id returned");
-  return await followJob(id, onProgress);
+  if (!job.id) throw new Error("no scan id returned");
+  return job.id;
+}
+
+/* Discover in-flight scans (page reload / browser that lost track). */
+export async function activeScans() {
+  try {
+    const r = await fetch(`${API_BASE}/scans/active`);
+    if (!r.ok) return [];
+    const jobs = await r.json();
+    return Array.isArray(jobs) ? jobs : [];
+  } catch (_e) { return []; }
+}
+
+/* Status of one job: {id, status, progress} or null when unknown. */
+export async function scanStatus(id) {
+  try {
+    const r = await fetch(`${API_BASE}/scans/${id}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch (_e) { return null; }
 }
 
 async function fetchResult(id) {
@@ -80,54 +104,71 @@ async function fetchResult(id) {
 
 function pct(p) { return p && p.total ? Math.round((p.done / p.total) * 100) : (p && p.pct) || 0; }
 
-function followJob(id, onProgress) {
+/* Follow a scan until the SERVER says it finished or failed.
+
+   Durability rules (a full-universe scan legitimately runs 30-90+ minutes):
+   - NO client-side deadline. The only terminal states are the server reporting
+     "completed" or "failed" — a slow scan is a running scan, never a timeout.
+   - SSE first; any stream hiccup falls back to polling, and polling retries
+     through transient network errors indefinitely.
+   - If nothing has been heard for a while the caller gets a heartbeat progress
+     callback (stalled: true) so the UI can say "still working" instead of dying. */
+export function followScan(id, onProgress) {
   return new Promise((resolve, reject) => {
     let done = false;
+    let lastHeard = performance.now();
     const finish = async () => {
       if (done) return; done = true;
       try { resolve(await fetchResult(id)); } catch (e) { reject(e); }
     };
     const fail = (msg) => { if (done) return; done = true; reject(new Error(msg || "scan failed")); };
 
+    // Stall heartbeat: reassure the UI when no event has arrived for 90s.
+    const stallTimer = setInterval(() => {
+      if (done) { clearInterval(stallTimer); return; }
+      const quietFor = (performance.now() - lastHeard) / 1000;
+      if (quietFor > 90) {
+        onProgress && onProgress({ stalled: true, quiet_seconds: Math.round(quietFor),
+          message: `still working — no update for ${Math.round(quietFor)}s (long scans are normal)` });
+      }
+    }, 30000);
+    const heard = () => { lastHeard = performance.now(); };
+
+    const poll = () => {
+      const tick = async () => {
+        if (done) return;
+        const data = await scanStatus(id);
+        if (data) {
+          heard();
+          if (data.progress) onProgress && onProgress({ ...data.progress, pct: pct(data.progress) });
+          if (data.status === "completed") { clearInterval(stallTimer); return finish(); }
+          if (data.status === "failed") { clearInterval(stallTimer); return fail(data.error || "scan failed"); }
+        }
+        // Unknown/transient errors: keep polling — the server decides when it's over.
+        setTimeout(tick, 1500);
+      };
+      tick();
+    };
+
     let es;
     try { es = new EventSource(`${API_BASE}/scans/${id}/events`); }
-    catch (_e) { return poll(id, onProgress, resolve, reject, () => done, (v) => (done = v)); }
+    catch (_e) { return poll(); }
 
     es.addEventListener("progress", (ev) => {
+      heard();
       try { const p = JSON.parse(ev.data); onProgress && onProgress({ ...p, pct: pct(p) }); } catch (_e) {}
     });
-    es.addEventListener("done", () => { es.close(); finish(); });
+    es.addEventListener("done", () => { es.close(); clearInterval(stallTimer); finish(); });
     es.addEventListener("error", (ev) => {
-      // Named "error" frame from the server carries data; a bare connection
-      // drop does not. On a connection drop, fall back to polling.
+      // A named "error" frame carries data (real failure); a bare connection
+      // drop does not — reconnect via polling and keep following.
       if (ev && ev.data) {
-        try { const p = JSON.parse(ev.data); es.close(); return fail(p.error); } catch (_e) {}
+        try { const p = JSON.parse(ev.data); es.close(); clearInterval(stallTimer); return fail(p.error); } catch (_e) {}
       }
       es.close();
-      if (!done) poll(id, onProgress, resolve, reject, () => done, (v) => (done = v));
+      if (!done) poll();
     });
   });
-}
-
-async function poll(id, onProgress, resolve, reject, isDone, setDone) {
-  const started = performance.now();
-  const tick = async () => {
-    if (isDone()) return;
-    try {
-      const r = await fetch(`${API_BASE}/scans/${id}`);
-      const data = await r.json();
-      if (data.progress) onProgress && onProgress({ ...data.progress, pct: pct(data.progress) });
-      if (data.status === "completed") {
-        setDone(true);
-        try { resolve(await fetchResult(id)); } catch (e) { reject(e); }
-        return;
-      }
-      if (data.status === "failed") { setDone(true); reject(new Error(data.error || "scan failed")); return; }
-    } catch (_e) { /* keep polling */ }
-    if (performance.now() - started > 15 * 60 * 1000) { setDone(true); reject(new Error("scan timed out")); return; }
-    setTimeout(tick, 1200);
-  };
-  tick();
 }
 
 /* Single-company analysis (live only). */
