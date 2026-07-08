@@ -25,6 +25,7 @@ restart — a missing directory or no prior scan is handled gracefully.
 from __future__ import annotations
 
 import os
+import pathlib
 
 from fastapi import FastAPI, Request, status
 from fastapi.exceptions import RequestValidationError
@@ -41,9 +42,17 @@ from convexity.core.logging import get_logger
 
 _log = get_logger(__name__)
 
-# Absolute path to the optional bundled frontend. Mounted at "/" only if present so
-# the API is fully usable headless (and import-safe) when no frontend is shipped.
-_FRONTEND_DIR = "/Users/elliottwboyd/Desktop/convexity/frontend"
+# Optional bundled frontend, mounted at "/" only if present so the API is fully
+# usable headless (and import-safe) when no frontend is shipped. The directory is
+# derived from the installed package location (repo root when editable-installed)
+# — NEVER hardcoded to a machine path: a previous hardcoded ~/Desktop path broke
+# after the repo moved, and macOS TCC additionally denies Desktop reads to
+# launchd-run services, silently degrading the server to headless. An explicit
+# CONVEXITY_FRONTEND_DIR environment variable overrides the derived default.
+_FRONTEND_DIR = os.environ.get(
+    "CONVEXITY_FRONTEND_DIR",
+    str(pathlib.Path(__file__).resolve().parent.parent.parent / "frontend"),
+)
 
 _API_TITLE = "Convexity"
 _API_DESCRIPTION = (
