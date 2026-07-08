@@ -21,9 +21,9 @@ from __future__ import annotations
 
 import datetime as _dt
 from enum import Enum
-from typing import List, Optional
+from typing import Any, List, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from convexity.core.models import (
     CompanyAnalysis,
@@ -78,11 +78,31 @@ class CreateScanRequest(BaseModel):
     The scan parameters reuse the canonical :class:`ScanParams` model directly so
     there is exactly one definition of what a screen is. The field is optional;
     when omitted the pipeline's documented defaults apply.
+
+    Both of these shapes are accepted::
+
+        {"params": {"top_n": 25, "universe_limit": null, ...}}   # canonical
+        {"top_n": 25, "universe_limit": null, ...}               # flat
+
+    The flat shape is lifted into ``params`` by a validator. This matters: with
+    ``extra="ignore"`` a flat body would otherwise be *silently discarded* and
+    the scan would run on pure defaults — which is exactly the production bug
+    this guards against (the dashboard posted flat fields, so every UI-chosen
+    cap band / top-n / universe limit was ignored).
     """
 
     model_config = ConfigDict(extra="ignore")
 
     params: ScanParams = Field(default_factory=ScanParams)
+
+    @model_validator(mode="before")
+    @classmethod
+    def _lift_flat_params(cls, data: Any) -> Any:
+        if isinstance(data, dict) and "params" not in data:
+            flat = {k: v for k, v in data.items() if k in ScanParams.model_fields}
+            if flat:
+                return {"params": flat}
+        return data
 
 
 class ScanJob(BaseModel):

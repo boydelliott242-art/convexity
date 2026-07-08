@@ -63,12 +63,14 @@ export async function runScan(params, onProgress) {
   return await followScan(id, onProgress);
 }
 
-/* Start a scan and return its job id (so callers can persist it for reattach). */
+/* Start a scan and return its job id (so callers can persist it for reattach).
+   The API's canonical body nests the screen under "params" — fields sent flat
+   used to be silently ignored, so scans ran on pure defaults. */
 export async function startScan(params) {
   const r = await fetch(`${API_BASE}/scans`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(params),
+    body: JSON.stringify({ params }),
   });
   if (!r.ok) throw new Error(`scan start failed (${r.status})`);
   const job = await r.json();
